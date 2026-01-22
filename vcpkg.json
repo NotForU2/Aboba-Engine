@@ -1,6 +1,6 @@
 {
   "dependencies": [
-    "sdl2",
-    "entt"
+    "entt",
+    "sdl2"
   ]
 }

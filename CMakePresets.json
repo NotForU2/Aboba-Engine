@@ -3,25 +3,26 @@
   "configurePresets": [
     {
       "name": "vcpkg",
-      "displayName": "Clang x64 vcpkg",
+      "displayName": "vcpkg",
       "generator": "Ninja",
       "binaryDir": "${sourceDir}/build",
       "cacheVariables": {
         "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
-        "CMAKE_C_COMPILER": "clang",
-        "CMAKE_CXX_COMPILER": "clang++"
+        "CMAKE_C_COMPILER": "gcc",
+        "CMAKE_CXX_COMPILER": "g++",
+        "VCPKG_TARGET_TRIPLET": "x64-mingw-static",
+        "VCPKG_HOST_TRIPLET": "x64-mingw-static"
       }
     },
     {
-      "name": "Clang 21.1.8 x86_64-pc-windows-msvc",
-      "displayName": "Clang 21.1.8 x86_64-pc-windows-msvc",
-      "description": "Using compilers: C = C:\\Program Files\\LLVM\\bin\\clang.exe, CXX = C:\\Program Files\\LLVM\\bin\\clang++.exe",
-      "binaryDir": "${sourceDir}/out/build/${presetName}",
+      "name": "GCC 15.2.0 x86_64-w64-mingw32 (mingw64)",
+      "displayName": "GCC 15.2.0 x86_64-w64-mingw32 (mingw64)",
       "generator": "Ninja",
+      "binaryDir": "${sourceDir}/out/build/${presetName}",
       "cacheVariables": {
         "CMAKE_INSTALL_PREFIX": "${sourceDir}/out/install/${presetName}",
-        "CMAKE_C_COMPILER": "clang",
-        "CMAKE_CXX_COMPILER": "clang++",
+        "CMAKE_C_COMPILER": "gcc",
+        "CMAKE_CXX_COMPILER": "g++",
         "CMAKE_BUILD_TYPE": "Debug"
       }
     }
