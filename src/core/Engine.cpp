@@ -1,5 +1,4 @@
 #include "Engine.hpp"
-#include <SDL2/SDL.h>
 
 Engine::Engine() : mIsRunning(false) {}
 
@@ -16,6 +15,11 @@ bool Engine::Initialize()
   }
 
   mWindow = std::make_unique<Window>("Aboba Engine", 1280, 720);
+
+  auto entity = mRegistry.create();
+  mRegistry.emplace<Position>(entity, 100.0f, 100.0f);
+  mRegistry.emplace<RenderData>(entity, 20, 255, 0, 0);
+
   mIsRunning = true;
 
   return true;
@@ -23,13 +27,11 @@ bool Engine::Initialize()
 
 void Engine::Run()
 {
-  uint32_t lastTicks = SDL_GetTicks();
+  Timer timer;
 
   while (mIsRunning)
   {
-    uint32_t currentTicks = SDL_GetTicks();
-    float dt = (currentTicks - lastTicks) / 1000.0f;
-    lastTicks = currentTicks;
+    float dt = timer.Tick();
 
     ProccessInput();
     Update(dt);
@@ -39,23 +41,32 @@ void Engine::Run()
 
 void Engine::ProccessInput()
 {
-  SDL_Event event;
-
-  while (SDL_PollEvent(&event))
-  {
-    if (event.type == SDL_QUIT)
-    {
-      mIsRunning = false;
-    }
-  }
+  mInputSystem.HandleEvents(mRegistry, mIsRunning);
 }
 
 void Engine::Update(float dt)
 {
+  mMovementSystem.Update(mRegistry, dt);
 }
 
 void Engine::Render()
 {
   mWindow->Clear();
+
+  SDL_Renderer *renderer = mWindow->GetRenderer();
+  auto view = mRegistry.view<Position, RenderData>();
+
+  view.each([renderer](const auto &pos, const auto &data)
+            {
+    SDL_SetRenderDrawColor(renderer, data.r, data.g, data.b, 255);
+
+    SDL_Rect rect = {
+        static_cast<int>(pos.x),
+        static_cast<int>(pos.y),
+        data.size,
+        data.size,
+    };
+    SDL_RenderFillRect(renderer, &rect); });
+
   mWindow->Present();
 }
