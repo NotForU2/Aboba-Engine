@@ -23,3 +23,7 @@ struct Destination
   float targetX;
   float targetY;
 };
+
+struct Selected
+{
+};

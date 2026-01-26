@@ -1,12 +1,12 @@
 #pragma once
 #include <entt/entt.hpp>
 #include <SDL2/SDL.h>
-#include <memory>
 #include "Window.hpp"
 #include "Timer.hpp"
 #include "../ecs/Components.hpp"
 #include "../system/InputSystem.hpp"
 #include "../system/MovementSystem.hpp"
+#include "../system/RenderSystem.hpp"
 
 class Engine
 {
@@ -23,8 +23,10 @@ private:
   void Render();
 
   entt::registry mRegistry;
+  Window mWindow;
+  bool mIsRunning;
+
   InputSystem mInputSystem;
   MovementSystem mMovementSystem;
-  std::unique_ptr<Window> mWindow;
-  bool mIsRunning;
+  RenderSystem mRenderSystem;
 };

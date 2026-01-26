@@ -9,16 +9,18 @@ Engine::~Engine()
 
 bool Engine::Initialize()
 {
-  if (SDL_Init(SDL_INIT_VIDEO) < 0)
+  if (!mWindow.Initialize("Aboba Engine", 1280, 720))
   {
     return false;
   }
 
-  mWindow = std::make_unique<Window>("Aboba Engine", 1280, 720);
+  auto unit1 = mRegistry.create();
+  mRegistry.emplace<Position>(unit1, 100.0f, 100.0f);
+  mRegistry.emplace<RenderData>(unit1, 32, 255, 0, 0);
 
-  auto entity = mRegistry.create();
-  mRegistry.emplace<Position>(entity, 100.0f, 100.0f);
-  mRegistry.emplace<RenderData>(entity, 20, 255, 0, 0);
+  auto unit2 = mRegistry.create();
+  mRegistry.emplace<Position>(unit2, 200.0f, 150.0f);
+  mRegistry.emplace<RenderData>(unit2, 32, 0, 0, 255);
 
   mIsRunning = true;
 
@@ -51,22 +53,7 @@ void Engine::Update(float dt)
 
 void Engine::Render()
 {
-  mWindow->Clear();
-
-  SDL_Renderer *renderer = mWindow->GetRenderer();
-  auto view = mRegistry.view<Position, RenderData>();
-
-  view.each([renderer](const auto &pos, const auto &data)
-            {
-    SDL_SetRenderDrawColor(renderer, data.r, data.g, data.b, 255);
-
-    SDL_Rect rect = {
-        static_cast<int>(pos.x),
-        static_cast<int>(pos.y),
-        data.size,
-        data.size,
-    };
-    SDL_RenderFillRect(renderer, &rect); });
-
-  mWindow->Present();
+  mWindow.Clear();
+  mRenderSystem.Render(mRegistry, mWindow.GetRenderer(), mInputSystem);
+  mWindow.Present();
 }

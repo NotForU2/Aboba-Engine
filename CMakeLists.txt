@@ -7,6 +7,6 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 find_package(SDL2 REQUIRED)
 find_package(EnTT REQUIRED)
 
-add_executable(Aboba-Engine src/main.cpp src/core/Engine.cpp src/core/Window.cpp)
+add_executable(Aboba-Engine src/main.cpp src/core/Engine.cpp src/core/Window.cpp src/system/InputSystem.cpp src/system/RenderSystem.cpp)
 
 target_link_libraries(Aboba-Engine PRIVATE SDL2::SDL2main SDL2::SDL2 EnTT::EnTT)

@@ -6,30 +6,14 @@
 class InputSystem
 {
 public:
-  void HandleEvents(entt::registry &registry, bool &isRunning)
-  {
-    SDL_Event event;
+  SDL_Rect GetSelectionRect() const;
+  void HandleEvents(entt::registry &registry, bool &isRunning);
 
-    while (SDL_PollEvent(&event))
-    {
-      if (event.type == SDL_QUIT)
-      {
-        isRunning = false;
-      }
+private:
+  bool mIsSelecting = false;
+  SDL_Point mStartPos = {0, 0};
+  SDL_Point mCurrentPos = {0, 0};
 
-      if (event.type == SDL_MOUSEBUTTONDOWN)
-      {
-        if (event.button.button == SDL_BUTTON_RIGHT)
-        {
-          int mx, my;
-          SDL_GetMouseState(&mx, &my);
-
-          auto view = registry.view<entt::entity>();
-
-          view.each([&](auto entity)
-                    { registry.emplace_or_replace<Destination>(entity, (float)mx, (float)my); });
-        }
-      }
-    }
-  }
+  SDL_Rect GetNormalizeRect(SDL_Point p1, SDL_Point p2) const;
+  void ApplySelection(entt::registry &registry);
 };

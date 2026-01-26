@@ -5,9 +5,10 @@
 class Window
 {
 public:
-  Window(const std::string &title, int width, int height);
+  Window();
   ~Window();
 
+  bool Initialize(const std::string &title, int width, int height);
   void Clear();
   void Present();
   SDL_Renderer *GetRenderer() const { return mRenderer; }
