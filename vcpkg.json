@@ -1,6 +1,9 @@
 {
   "dependencies": [
     "entt",
-    "sdl2"
+    "glm",
+    "sdl2",
+    "stb",
+    "vulkan"
   ]
 }

@@ -14,6 +14,9 @@ public:
   SDL_Renderer *GetRenderer() const { return mRenderer; }
 
 private:
+  int mWidth;
+  int mHeight;
+
   SDL_Window *mWindow;
   SDL_Renderer *mRenderer;
 };

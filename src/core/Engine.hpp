@@ -7,6 +7,7 @@
 #include "../system/InputSystem.hpp"
 #include "../system/MovementSystem.hpp"
 #include "../system/RenderSystem.hpp"
+#include "../system/CollisionSystem.hpp"
 
 class Engine
 {
@@ -29,4 +30,5 @@ private:
   InputSystem mInputSystem;
   MovementSystem mMovementSystem;
   RenderSystem mRenderSystem;
+  CollisionSystem mCollisionSystem;
 };

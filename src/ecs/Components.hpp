@@ -24,6 +24,12 @@ struct Destination
   float targetY;
 };
 
+struct Collider
+{
+  float radius;
+  bool isStatic;
+};
+
 struct Selected
 {
 };

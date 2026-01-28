@@ -17,10 +17,12 @@ bool Engine::Initialize()
   auto unit1 = mRegistry.create();
   mRegistry.emplace<Position>(unit1, 100.0f, 100.0f);
   mRegistry.emplace<RenderData>(unit1, 32, 255, 0, 0);
+  mRegistry.emplace<Collider>(unit1, 16.0f, false);
 
   auto unit2 = mRegistry.create();
   mRegistry.emplace<Position>(unit2, 200.0f, 150.0f);
   mRegistry.emplace<RenderData>(unit2, 32, 0, 0, 255);
+  mRegistry.emplace<Collider>(unit2, 16.0f, false);
 
   mIsRunning = true;
 
@@ -49,6 +51,7 @@ void Engine::ProccessInput()
 void Engine::Update(float dt)
 {
   mMovementSystem.Update(mRegistry, dt);
+  mCollisionSystem.Update(mRegistry, dt);
 }
 
 void Engine::Render()
