@@ -1,6 +1,5 @@
 #pragma once
 #include <SDL2/SDL.h>
-#include <string>
 
 class Window
 {
@@ -8,15 +7,16 @@ public:
   Window();
   ~Window();
 
-  bool Initialize(const std::string &title, int width, int height);
+  bool Init(const char *title, int width, int height);
   void Clear();
   void Present();
-  SDL_Renderer *GetRenderer() const { return mRenderer; }
+  SDL_Window *GetWindow();
+  // SDL_Renderer *GetRenderer() const { return mRenderer; }
 
 private:
   int mWidth;
   int mHeight;
 
   SDL_Window *mWindow;
-  SDL_Renderer *mRenderer;
+  // SDL_Renderer *mRenderer;
 };

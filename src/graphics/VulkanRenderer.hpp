@@ -5,6 +5,7 @@
 #include <vector>
 #include <stdexcept>
 #include <iostream>
+#include <cstring>
 
 class VulkanRenderer
 {
@@ -22,7 +23,16 @@ private:
   VkQueue mGraphicsQueue;
   VkSurfaceKHR mSurface;
 
+  const std::vector<const char *> validationLayers = {"VK_LAYER_KHRONOS_validation"};
+
+#ifdef NDEBUG
+  const bool enableValidationLayers = false;
+#else
+  const bool enableValidationLayers = true;
+#endif
+
   void CreateInstance();
+  bool CheckValidationLayerSupport();
   void PickPhysicalDevice();
   void CreateLogicalDevice();
   void CreateSurface();

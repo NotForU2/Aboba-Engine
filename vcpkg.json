@@ -2,7 +2,12 @@
   "dependencies": [
     "entt",
     "glm",
-    "sdl2",
+    {
+      "name": "sdl2",
+      "features": [
+        "vulkan"
+      ]
+    },
     "stb",
     "vulkan"
   ]

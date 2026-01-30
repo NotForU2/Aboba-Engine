@@ -6,8 +6,8 @@
 #include "../ecs/Components.hpp"
 #include "../system/InputSystem.hpp"
 #include "../system/MovementSystem.hpp"
-#include "../system/RenderSystem.hpp"
 #include "../system/CollisionSystem.hpp"
+#include "../graphics/VulkanRenderer.hpp"
 
 class Engine
 {
@@ -15,7 +15,7 @@ public:
   Engine();
   ~Engine();
 
-  bool Initialize();
+  bool Init();
   void Run();
 
 private:
@@ -29,6 +29,7 @@ private:
 
   InputSystem mInputSystem;
   MovementSystem mMovementSystem;
-  RenderSystem mRenderSystem;
   CollisionSystem mCollisionSystem;
+
+  VulkanRenderer mVulkanRenderer;
 };

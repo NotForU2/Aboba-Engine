@@ -7,10 +7,20 @@ Engine::~Engine()
   SDL_Quit();
 }
 
-bool Engine::Initialize()
+bool Engine::Init()
 {
-  if (!mWindow.Initialize("Aboba Engine", 1280, 720))
+  if (!mWindow.Init("Aboba Engine", 1280, 720))
   {
+    return false;
+  }
+
+  try
+  {
+    mVulkanRenderer.Init(mWindow.GetWindow());
+  }
+  catch (const std::exception &e)
+  {
+    std::cerr << "Vulkan Init Error: " << e.what() << std::endl;
     return false;
   }
 
@@ -57,6 +67,5 @@ void Engine::Update(float dt)
 void Engine::Render()
 {
   mWindow.Clear();
-  mRenderSystem.Render(mRegistry, mWindow.GetRenderer(), mInputSystem);
   mWindow.Present();
 }

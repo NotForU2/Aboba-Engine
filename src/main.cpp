@@ -5,7 +5,7 @@
 int main(int, char **)
 {
   Engine app;
-  if (app.Initialize())
+  if (app.Init())
   {
     app.Run();
   }

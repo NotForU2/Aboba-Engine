@@ -16,6 +16,7 @@ add_executable(Aboba-Engine
   src/system/InputSystem.cpp
   src/system/RenderSystem.cpp
   src/system/CollisionSystem.cpp
+  src/graphics/VulkanRenderer.cpp
 )
 
 target_link_libraries(Aboba-Engine PRIVATE
