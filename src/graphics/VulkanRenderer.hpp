@@ -6,6 +6,18 @@
 #include <stdexcept>
 #include <iostream>
 #include <cstring>
+#include <optional>
+#include <map>
+
+struct QueueFamilyIndices
+{
+  std::optional<uint32_t> graphicsFamily;
+
+  bool isComplete()
+  {
+    return graphicsFamily.has_value();
+  }
+};
 
 class VulkanRenderer
 {
@@ -34,6 +46,8 @@ private:
   void CreateInstance();
   bool CheckValidationLayerSupport();
   void PickPhysicalDevice();
+  int RateDeviceSuitability(VkPhysicalDevice device);
+  QueueFamilyIndices FindQueueFamilies(VkPhysicalDevice device);
   void CreateLogicalDevice();
   void CreateSurface();
 };
