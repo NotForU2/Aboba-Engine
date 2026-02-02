@@ -4,13 +4,23 @@ void VulkanRenderer::Init(SDL_Window *window)
 {
   mWindow = window;
   CreateInstance();
+  CreateSurface();
   PickPhysicalDevice();
   CreateLogicalDevice();
+  CreateSwapchain();
+  CreateImageViews();
 }
 
 void VulkanRenderer::Cleanup()
 {
+  for (auto imageView : mSwapchainImageViews)
+  {
+    vkDestroyImageView(mDevice, imageView, nullptr);
+  }
+  vkDestroySwapchainKHR(mDevice, mSwapchain, nullptr);
+
   vkDestroyDevice(mDevice, nullptr);
+  vkDestroySurfaceKHR(mInstance, mSurface, nullptr);
   vkDestroyInstance(mInstance, nullptr);
 }
 
@@ -92,6 +102,9 @@ void VulkanRenderer::CreateInstance()
   {
     throw std::runtime_error("Failed to get SDL Vulkan extensions");
   }
+
+  // 2KHR
+  extensions.push_back(VK_KHR_GET_SURFACE_CAPABILITIES_2_EXTENSION_NAME);
 
   // В Vulkan 1.3+ для переносимости (особенно на macOS через MoltenVK) может понадобиться флаг (flag)
   // VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR, но на Windows пока опустим.
@@ -237,6 +250,14 @@ QueueFamilyIndices VulkanRenderer::FindQueueFamilies(VkPhysicalDevice device)
       indices.graphicsFamily = static_cast<uint32_t>(i);
     }
 
+    VkBool32 presentSupport = false;
+    vkGetPhysicalDeviceSurfaceSupportKHR(device, i, mSurface, &presentSupport);
+
+    if (presentSupport)
+    {
+      indices.presentFamily = i;
+    }
+
     if (indices.isComplete())
     {
       break;
@@ -251,15 +272,22 @@ void VulkanRenderer::CreateLogicalDevice()
   QueueFamilyIndices indices = FindQueueFamilies(mPhysicalDevice);
 
   std::vector<VkDeviceQueueCreateInfo> queueCreateInfos;
-
-  float queuePriority = 1.0f;
-  VkDeviceQueueCreateInfo queueCreateInfo{
-      .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
-      .queueFamilyIndex = indices.graphicsFamily.value(),
-      .queueCount = 1,
-      .pQueuePriorities = &queuePriority,
+  std::set<uint32_t> uniqueQueueFamisies = {
+      indices.graphicsFamily.value(),
+      indices.presentFamily.value(),
   };
-  queueCreateInfos.push_back(queueCreateInfo);
+
+  for (uint32_t queieFamily : uniqueQueueFamisies)
+  {
+    float queuePriority = 1.0f;
+    VkDeviceQueueCreateInfo queueCreateInfo{
+        .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
+        .queueFamilyIndex = queieFamily,
+        .queueCount = 1,
+        .pQueuePriorities = &queuePriority,
+    };
+    queueCreateInfos.push_back(queueCreateInfo);
+  }
 
   // Vulkan 1.2
   VkPhysicalDeviceVulkan12Features features12{
@@ -296,6 +324,8 @@ void VulkanRenderer::CreateLogicalDevice()
       .pQueueCreateInfos = queueCreateInfos.data(),
       .enabledLayerCount = enableValidationLayers ? static_cast<uint32_t>(validationLayers.size()) : 0,
       .ppEnabledLayerNames = enableValidationLayers ? validationLayers.data() : nullptr,
+      .enabledExtensionCount = static_cast<uint32_t>(deviceExtensions.size()),
+      .ppEnabledExtensionNames = deviceExtensions.data(),
       .pEnabledFeatures = nullptr,
   };
 
@@ -305,6 +335,210 @@ void VulkanRenderer::CreateLogicalDevice()
   }
 
   vkGetDeviceQueue(mDevice, indices.graphicsFamily.value(), 0, &mGraphicsQueue);
+  vkGetDeviceQueue(mDevice, indices.presentFamily.value(), 0, &mPresentQueue);
 
   std::cout << "Logical Device created with Vulkan 1.4 chain" << std::endl;
+}
+
+void VulkanRenderer::CreateSurface()
+{
+  if (!SDL_Vulkan_CreateSurface(mWindow, mInstance, &mSurface))
+  {
+    throw std::runtime_error("Failed to create window surface");
+  }
+
+  std::cout << "Vulkan Surface created successfully" << std::endl;
+}
+
+SwapchainSupportDetails VulkanRenderer::QuerySwapchainSupport(VkPhysicalDevice device)
+{
+  SwapchainSupportDetails details;
+
+  VkPhysicalDeviceSurfaceInfo2KHR surfaceInfo2{
+      .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SURFACE_INFO_2_KHR,
+      .surface = mSurface,
+  };
+
+  VkSurfaceCapabilities2KHR capabilities2{
+      .sType = VK_STRUCTURE_TYPE_SURFACE_CAPABILITIES_2_KHR,
+  };
+  vkGetPhysicalDeviceSurfaceCapabilities2KHR(device, &surfaceInfo2, &capabilities2);
+  details.capabilities = capabilities2;
+
+  uint32_t formatCount;
+  vkGetPhysicalDeviceSurfaceFormats2KHR(device, &surfaceInfo2, &formatCount, nullptr);
+  if (formatCount != 0)
+  {
+    VkSurfaceFormat2KHR defaultFormat{
+        .sType = VK_STRUCTURE_TYPE_SURFACE_FORMAT_2_KHR,
+    };
+    std::vector<VkSurfaceFormat2KHR> formats2(formatCount, defaultFormat);
+
+    vkGetPhysicalDeviceSurfaceFormats2KHR(device, &surfaceInfo2, &formatCount, formats2.data());
+
+    details.formats = formats2;
+  }
+
+  uint32_t presentModeCount;
+  vkGetPhysicalDeviceSurfacePresentModesKHR(device, mSurface, &presentModeCount, nullptr);
+  if (presentModeCount != 0)
+  {
+    details.presentModes.resize(presentModeCount);
+    vkGetPhysicalDeviceSurfacePresentModesKHR(device, mSurface, &presentModeCount, details.presentModes.data());
+  }
+
+  return details;
+}
+
+VkSurfaceFormat2KHR VulkanRenderer::ChooseSwapSurfaceFormat(const std::vector<VkSurfaceFormat2KHR> &availableFormats2)
+{
+  for (const auto &availableFormat2 : availableFormats2)
+  {
+    if (availableFormat2.surfaceFormat.format == VK_FORMAT_B8G8R8_SRGB && availableFormat2.surfaceFormat.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR)
+    {
+      return availableFormat2;
+    }
+  }
+
+  return availableFormats2[0];
+}
+
+VkPresentModeKHR VulkanRenderer::ChooseSwapPresentMode(const std::vector<VkPresentModeKHR> &availablePresentModes)
+{
+  for (const auto &availablePresentMode : availablePresentModes)
+  {
+    if (availablePresentMode == VK_PRESENT_MODE_MAILBOX_KHR)
+    {
+      return availablePresentMode;
+    }
+  }
+
+  return VK_PRESENT_MODE_FIFO_KHR;
+}
+
+VkExtent2D VulkanRenderer::ChooseSwapExtent(const VkSurfaceCapabilities2KHR &capabilities2)
+{
+  if (capabilities2.surfaceCapabilities.currentExtent.width != std::numeric_limits<uint32_t>::max())
+  {
+    return capabilities2.surfaceCapabilities.currentExtent;
+  }
+  else
+  {
+    int width, height;
+    SDL_Vulkan_GetDrawableSize(mWindow, &width, &height);
+
+    VkExtent2D actualExtent = {
+        static_cast<uint32_t>(width),
+        static_cast<uint32_t>(height),
+    };
+
+    actualExtent.width = std::clamp(
+        actualExtent.width,
+        capabilities2.surfaceCapabilities.minImageExtent.width,
+        capabilities2.surfaceCapabilities.maxImageExtent.width);
+    actualExtent.height = std::clamp(
+        actualExtent.height,
+        capabilities2.surfaceCapabilities.minImageExtent.height,
+        capabilities2.surfaceCapabilities.maxImageExtent.height);
+
+    return actualExtent;
+  }
+}
+
+void VulkanRenderer::CreateSwapchain()
+{
+  SwapchainSupportDetails swapchainSupport = QuerySwapchainSupport(mPhysicalDevice);
+
+  VkSurfaceFormat2KHR surfaceFormat = ChooseSwapSurfaceFormat(swapchainSupport.formats);
+  VkPresentModeKHR presentMode = ChooseSwapPresentMode(swapchainSupport.presentModes);
+  VkExtent2D extent = ChooseSwapExtent(swapchainSupport.capabilities);
+
+  uint32_t imageCount = swapchainSupport.capabilities.surfaceCapabilities.minImageCount + 1;
+
+  if (swapchainSupport.capabilities.surfaceCapabilities.maxImageCount > 0 &&
+      imageCount > swapchainSupport.capabilities.surfaceCapabilities.maxImageCount)
+  {
+    imageCount = swapchainSupport.capabilities.surfaceCapabilities.maxImageCount;
+  }
+
+  VkSwapchainCreateInfoKHR createInfo{
+      .sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
+      .surface = mSurface,
+      .minImageCount = imageCount,
+      .imageFormat = surfaceFormat.surfaceFormat.format,
+      .imageColorSpace = surfaceFormat.surfaceFormat.colorSpace,
+      .imageExtent = extent,
+      .imageArrayLayers = 1,
+      .imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
+      .preTransform = swapchainSupport.capabilities.surfaceCapabilities.currentTransform,
+      .compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
+      .presentMode = presentMode,
+      .clipped = VK_TRUE,
+      .oldSwapchain = VK_NULL_HANDLE,
+  };
+
+  QueueFamilyIndices indices = FindQueueFamilies(mPhysicalDevice);
+  uint32_t queueFamilyIndices[] = {
+      indices.graphicsFamily.value(),
+      indices.presentFamily.value(),
+  };
+
+  if (indices.graphicsFamily != indices.presentFamily)
+  {
+    createInfo.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
+    createInfo.queueFamilyIndexCount = 2;
+    createInfo.pQueueFamilyIndices = queueFamilyIndices;
+  }
+  else
+  {
+    createInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
+  }
+
+  if (vkCreateSwapchainKHR(mDevice, &createInfo, nullptr, &mSwapchain) != VK_SUCCESS)
+  {
+    throw std::runtime_error("Failed to create Swapchain");
+  }
+
+  vkGetSwapchainImagesKHR(mDevice, mSwapchain, &imageCount, nullptr);
+  mSwapchainImages.resize(imageCount);
+  vkGetSwapchainImagesKHR(mDevice, mSwapchain, &imageCount, mSwapchainImages.data());
+
+  mSwapchainImageFormat = surfaceFormat.surfaceFormat.format;
+  mSwapchainExtent = extent;
+
+  std::cout << "Swapchain created. Images: " << imageCount << ", Resolution: "
+            << extent.width << "x" << extent.height << std::endl;
+}
+
+void VulkanRenderer::CreateImageViews()
+{
+  mSwapchainImageViews.resize(mSwapchainImages.size());
+
+  for (size_t i = 0; i != mSwapchainImages.size(); i++)
+  {
+    VkImageViewCreateInfo createInfo{
+        .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+        .image = mSwapchainImages[i],
+        .viewType = VK_IMAGE_VIEW_TYPE_2D,
+        .format = mSwapchainImageFormat,
+        .components = {
+            .r = VK_COMPONENT_SWIZZLE_IDENTITY,
+            .g = VK_COMPONENT_SWIZZLE_IDENTITY,
+            .b = VK_COMPONENT_SWIZZLE_IDENTITY,
+            .a = VK_COMPONENT_SWIZZLE_IDENTITY,
+        },
+        .subresourceRange = {
+            .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+            .baseMipLevel = 0,
+            .levelCount = 1,
+            .baseArrayLayer = 0,
+            .layerCount = 1,
+        },
+    };
+
+    if (vkCreateImageView(mDevice, &createInfo, nullptr, &mSwapchainImageViews[i]) != VK_SUCCESS)
+    {
+      throw std::runtime_error("Failed to create Image Views");
+    }
+  }
 }
