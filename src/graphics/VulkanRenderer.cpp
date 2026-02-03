@@ -2,6 +2,8 @@
 
 void VulkanRenderer::Init(SDL_Window *window)
 {
+  ReadFile("shaders/vert.spv");
+
   mWindow = window;
   CreateInstance();
   CreateSurface();
@@ -251,11 +253,11 @@ QueueFamilyIndices VulkanRenderer::FindQueueFamilies(VkPhysicalDevice device)
     }
 
     VkBool32 presentSupport = false;
-    vkGetPhysicalDeviceSurfaceSupportKHR(device, i, mSurface, &presentSupport);
+    vkGetPhysicalDeviceSurfaceSupportKHR(device, static_cast<uint32_t>(i), mSurface, &presentSupport);
 
     if (presentSupport)
     {
-      indices.presentFamily = i;
+      indices.presentFamily = static_cast<uint32_t>(i);
     }
 
     if (indices.isComplete())
@@ -334,8 +336,22 @@ void VulkanRenderer::CreateLogicalDevice()
     throw std::runtime_error("Failed to create logical device");
   }
 
-  vkGetDeviceQueue(mDevice, indices.graphicsFamily.value(), 0, &mGraphicsQueue);
-  vkGetDeviceQueue(mDevice, indices.presentFamily.value(), 0, &mPresentQueue);
+  VkDeviceQueueInfo2 queueInfo{
+      .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_INFO_2,
+      .queueFamilyIndex = indices.graphicsFamily.value(),
+      .queueIndex = 0,
+  };
+
+  vkGetDeviceQueue2(mDevice, &queueInfo, &mGraphicsQueue);
+  if (indices.graphicsFamily != indices.presentFamily)
+  {
+    queueInfo.queueFamilyIndex = indices.presentFamily.value();
+    vkGetDeviceQueue2(mDevice, &queueInfo, &mPresentQueue);
+  }
+  else
+  {
+    mPresentQueue = mGraphicsQueue;
+  }
 
   std::cout << "Logical Device created with Vulkan 1.4 chain" << std::endl;
 }
@@ -541,4 +557,40 @@ void VulkanRenderer::CreateImageViews()
       throw std::runtime_error("Failed to create Image Views");
     }
   }
+}
+
+std::vector<char> VulkanRenderer::ReadFile(const std::string &filename)
+{
+  std::ifstream file(filename, std::ios::ate | std::ios::binary);
+
+  if (!file.is_open())
+  {
+    throw std::runtime_error("Failed to open file: " + filename);
+  }
+
+  size_t fileSize = (size_t)file.tellg();
+  std::vector<char> buffer(fileSize);
+
+  file.seekg(0);
+  file.read(buffer.data(), fileSize);
+  file.close();
+
+  return buffer;
+}
+
+VkShaderModule VulkanRenderer::CreateSharedModule(const std::vector<char> &code)
+{
+  VkShaderModuleCreateInfo createInfo{
+      .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+      .codeSize = code.size(),
+      .pCode = reinterpret_cast<const uint32_t *>(code.data()),
+  };
+
+  VkShaderModule shaderModule;
+  if (vkCreateShaderModule(mDevice, &createInfo, nullptr, &shaderModule) != VK_SUCCESS)
+  {
+    throw std::runtime_error("Failed to create shader module");
+  }
+
+  return shaderModule;
 }

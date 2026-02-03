@@ -10,6 +10,7 @@
 #include <map>
 #include <set>
 #include <algorithm>
+#include <fstream>
 
 struct SwapchainSupportDetails
 {
@@ -38,18 +39,26 @@ public:
   void DeviceWaitIdle();
 
 private:
+  // Window
   SDL_Window *mWindow;
+  // Instance
   VkInstance mInstance;
+  // Device
   VkPhysicalDevice mPhysicalDevice = VK_NULL_HANDLE;
   VkDevice mDevice;
   VkQueue mGraphicsQueue;
+  // Surface
   VkSurfaceKHR mSurface;
   VkQueue mPresentQueue;
+  // Swapchain
   VkSwapchainKHR mSwapchain;
   std::vector<VkImage> mSwapchainImages;
   VkFormat mSwapchainImageFormat;
   VkExtent2D mSwapchainExtent;
   std::vector<VkImageView> mSwapchainImageViews;
+  // Pipeline
+  VkPipelineLayout mPipelineLayout;
+  VkPipeline mGraphicsPipeline;
 
   const std::vector<const char *> validationLayers = {"VK_LAYER_KHRONOS_validation"};
   const std::vector<const char *> deviceExtensions = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
@@ -60,17 +69,25 @@ private:
   const bool enableValidationLayers = true;
 #endif
 
+  // Instance
   void CreateInstance();
   bool CheckValidationLayerSupport();
+  // Device
   void PickPhysicalDevice();
   int RateDeviceSuitability(VkPhysicalDevice device);
   QueueFamilyIndices FindQueueFamilies(VkPhysicalDevice device);
   void CreateLogicalDevice();
+  // Surface
   void CreateSurface();
+  // Swapchain
   void CreateSwapchain();
   void CreateImageViews();
   SwapchainSupportDetails QuerySwapchainSupport(VkPhysicalDevice device);
   VkSurfaceFormat2KHR ChooseSwapSurfaceFormat(const std::vector<VkSurfaceFormat2KHR> &availableFormats);
   VkPresentModeKHR ChooseSwapPresentMode(const std::vector<VkPresentModeKHR> &availablePresentModes);
   VkExtent2D ChooseSwapExtent(const VkSurfaceCapabilities2KHR &capabilities);
+  // Pipeline
+  static std::vector<char> ReadFile(const std::string &filename);
+  VkShaderModule CreateSharedModule(const std::vector<char> &code);
+  void CreateGraphicsPipeline();
 };
