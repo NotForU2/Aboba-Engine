@@ -45,6 +45,7 @@ private:
   VkInstance mInstance;
   // Device
   VkPhysicalDevice mPhysicalDevice = VK_NULL_HANDLE;
+  QueueFamilyIndices mQueueFamilyIndices;
   VkDevice mDevice;
   VkQueue mGraphicsQueue;
   // Surface
@@ -88,6 +89,6 @@ private:
   VkExtent2D ChooseSwapExtent(const VkSurfaceCapabilities2KHR &capabilities);
   // Pipeline
   static std::vector<char> ReadFile(const std::string &filename);
-  VkShaderModule CreateSharedModule(const std::vector<char> &code);
+  VkShaderModule CreateShaderModule(const std::vector<char> &code);
   void CreateGraphicsPipeline();
 };

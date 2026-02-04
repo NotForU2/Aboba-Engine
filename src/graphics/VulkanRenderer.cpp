@@ -2,25 +2,26 @@
 
 void VulkanRenderer::Init(SDL_Window *window)
 {
-  ReadFile("shaders/vert.spv");
-
   mWindow = window;
+
   CreateInstance();
   CreateSurface();
   PickPhysicalDevice();
   CreateLogicalDevice();
   CreateSwapchain();
   CreateImageViews();
+  CreateGraphicsPipeline();
 }
 
 void VulkanRenderer::Cleanup()
 {
+  vkDestroyPipeline(mDevice, mGraphicsPipeline, nullptr);
+  vkDestroyPipelineLayout(mDevice, mPipelineLayout, nullptr);
   for (auto imageView : mSwapchainImageViews)
   {
     vkDestroyImageView(mDevice, imageView, nullptr);
   }
   vkDestroySwapchainKHR(mDevice, mSwapchain, nullptr);
-
   vkDestroyDevice(mDevice, nullptr);
   vkDestroySurfaceKHR(mInstance, mSurface, nullptr);
   vkDestroyInstance(mInstance, nullptr);
@@ -159,6 +160,7 @@ void VulkanRenderer::PickPhysicalDevice()
   if (rating.rbegin()->first > 0)
   {
     mPhysicalDevice = rating.rbegin()->second;
+    mQueueFamilyIndices = FindQueueFamilies(mPhysicalDevice);
   }
   else
   {
@@ -212,17 +214,17 @@ int VulkanRenderer::RateDeviceSuitability(VkPhysicalDevice device)
 
   if (!features13.dynamicRendering)
   {
-    std::cout << "Device missing Dynamic Rendering support" << std::endl;
+    std::cout << "Device (" << deviceProperties.properties.deviceName << ") missing Dynamic Rendering support" << std::endl;
     return 0;
   }
   if (!features13.synchronization2)
   {
-    std::cout << "Device missing Synchronization2 support" << std::endl;
+    std::cout << "Device (" << deviceProperties.properties.deviceName << ") missing Synchronization2 support" << std::endl;
     return 0;
   }
   if (!features2.features.geometryShader)
   {
-    std::cout << "Device missing Geometry Shader support" << std::endl;
+    std::cout << "Device (" << deviceProperties.properties.deviceName << ") missing Geometry Shader support" << std::endl;
     return 0;
   }
 
@@ -271,12 +273,10 @@ QueueFamilyIndices VulkanRenderer::FindQueueFamilies(VkPhysicalDevice device)
 
 void VulkanRenderer::CreateLogicalDevice()
 {
-  QueueFamilyIndices indices = FindQueueFamilies(mPhysicalDevice);
-
   std::vector<VkDeviceQueueCreateInfo> queueCreateInfos;
   std::set<uint32_t> uniqueQueueFamisies = {
-      indices.graphicsFamily.value(),
-      indices.presentFamily.value(),
+      mQueueFamilyIndices.graphicsFamily.value(),
+      mQueueFamilyIndices.presentFamily.value(),
   };
 
   for (uint32_t queieFamily : uniqueQueueFamisies)
@@ -338,14 +338,14 @@ void VulkanRenderer::CreateLogicalDevice()
 
   VkDeviceQueueInfo2 queueInfo{
       .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_INFO_2,
-      .queueFamilyIndex = indices.graphicsFamily.value(),
+      .queueFamilyIndex = mQueueFamilyIndices.graphicsFamily.value(),
       .queueIndex = 0,
   };
 
   vkGetDeviceQueue2(mDevice, &queueInfo, &mGraphicsQueue);
-  if (indices.graphicsFamily != indices.presentFamily)
+  if (mQueueFamilyIndices.graphicsFamily != mQueueFamilyIndices.presentFamily)
   {
-    queueInfo.queueFamilyIndex = indices.presentFamily.value();
+    queueInfo.queueFamilyIndex = mQueueFamilyIndices.presentFamily.value();
     vkGetDeviceQueue2(mDevice, &queueInfo, &mPresentQueue);
   }
   else
@@ -493,13 +493,12 @@ void VulkanRenderer::CreateSwapchain()
       .oldSwapchain = VK_NULL_HANDLE,
   };
 
-  QueueFamilyIndices indices = FindQueueFamilies(mPhysicalDevice);
   uint32_t queueFamilyIndices[] = {
-      indices.graphicsFamily.value(),
-      indices.presentFamily.value(),
+      mQueueFamilyIndices.graphicsFamily.value(),
+      mQueueFamilyIndices.presentFamily.value(),
   };
 
-  if (indices.graphicsFamily != indices.presentFamily)
+  if (mQueueFamilyIndices.graphicsFamily != mQueueFamilyIndices.presentFamily)
   {
     createInfo.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
     createInfo.queueFamilyIndexCount = 2;
@@ -578,7 +577,7 @@ std::vector<char> VulkanRenderer::ReadFile(const std::string &filename)
   return buffer;
 }
 
-VkShaderModule VulkanRenderer::CreateSharedModule(const std::vector<char> &code)
+VkShaderModule VulkanRenderer::CreateShaderModule(const std::vector<char> &code)
 {
   VkShaderModuleCreateInfo createInfo{
       .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
@@ -593,4 +592,139 @@ VkShaderModule VulkanRenderer::CreateSharedModule(const std::vector<char> &code)
   }
 
   return shaderModule;
+}
+
+void VulkanRenderer::CreateGraphicsPipeline()
+{
+  // Загрузка шейдеров
+  auto vertShaderCode = ReadFile("shaders/vert.spv");
+  auto fragShaderCode = ReadFile("shaders/frag.spv");
+
+  VkShaderModule vertShaderModule = CreateShaderModule(vertShaderCode);
+  VkShaderModule fragShaderModule = CreateShaderModule(fragShaderCode);
+
+  VkPipelineShaderStageCreateInfo vertShaderStageInfo{
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+      .stage = VK_SHADER_STAGE_VERTEX_BIT,
+      .module = vertShaderModule,
+      .pName = "main",
+  };
+  VkPipelineShaderStageCreateInfo fragShaderStageInfo{
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+      .stage = VK_SHADER_STAGE_FRAGMENT_BIT,
+      .module = fragShaderModule,
+      .pName = "main",
+  };
+
+  std::vector<VkPipelineShaderStageCreateInfo> shaderStages = {
+      vertShaderStageInfo,
+      fragShaderStageInfo,
+  };
+
+  // Vertex Input
+  VkPipelineVertexInputStateCreateInfo vertexInputInfo{
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
+      .vertexBindingDescriptionCount = 0,
+      .vertexAttributeDescriptionCount = 0,
+  };
+
+  // Input Assembly
+  VkPipelineInputAssemblyStateCreateInfo inputAssembly{
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
+      .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+      .primitiveRestartEnable = VK_FALSE,
+  };
+
+  // Viewport и Scissor
+  VkPipelineViewportStateCreateInfo viewportState{
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
+      .viewportCount = 1,
+      .scissorCount = 1,
+  };
+
+  // Rasterizer
+  VkPipelineRasterizationStateCreateInfo rasterizer{
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
+      .depthClampEnable = VK_FALSE,
+      .rasterizerDiscardEnable = VK_FALSE,
+      .polygonMode = VK_POLYGON_MODE_FILL,
+      .cullMode = VK_CULL_MODE_BACK_BIT,
+      .frontFace = VK_FRONT_FACE_CLOCKWISE,
+      .depthBiasEnable = VK_FALSE,
+      .lineWidth = 1.0f,
+  };
+
+  // Multisampling
+  VkPipelineMultisampleStateCreateInfo multisampling{
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
+      .rasterizationSamples = VK_SAMPLE_COUNT_1_BIT,
+      .sampleShadingEnable = VK_FALSE,
+  };
+
+  // Color Blending
+  VkPipelineColorBlendAttachmentState colorBlendAttachment{
+      .blendEnable = VK_FALSE,
+      .colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT,
+  };
+  VkPipelineColorBlendStateCreateInfo colorBlending{
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
+      .logicOpEnable = VK_FALSE,
+      .attachmentCount = 1,
+      .pAttachments = &colorBlendAttachment,
+  };
+
+  // Dynamic States
+  std::vector<VkDynamicState> dynamicStates = {
+      VK_DYNAMIC_STATE_VIEWPORT,
+      VK_DYNAMIC_STATE_SCISSOR,
+  };
+  VkPipelineDynamicStateCreateInfo pipelineDynamicState{
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
+      .dynamicStateCount = static_cast<uint32_t>(dynamicStates.size()),
+      .pDynamicStates = dynamicStates.data(),
+  };
+
+  // Pipeline Layout
+  VkPipelineLayoutCreateInfo pipelineLayoutInfo{
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+  };
+  if (vkCreatePipelineLayout(mDevice, &pipelineLayoutInfo, nullptr, &mPipelineLayout) != VK_SUCCESS)
+  {
+    throw std::runtime_error("Failed to create pipeline layout");
+  }
+
+  // Pipeline Rendering
+  VkPipelineRenderingCreateInfo pipelineRenderingInfo{
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO,
+      .colorAttachmentCount = 1,
+      .pColorAttachmentFormats = &mSwapchainImageFormat,
+  };
+
+  // Main create info
+  VkGraphicsPipelineCreateInfo pipelineInfo{
+      .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
+      .pNext = &pipelineRenderingInfo,
+      .stageCount = 2,
+      .pStages = shaderStages.data(),
+      .pVertexInputState = &vertexInputInfo,
+      .pInputAssemblyState = &inputAssembly,
+      .pViewportState = &viewportState,
+      .pRasterizationState = &rasterizer,
+      .pMultisampleState = &multisampling,
+      .pColorBlendState = &colorBlending,
+      .pDynamicState = &pipelineDynamicState,
+      .layout = mPipelineLayout,
+      .renderPass = VK_NULL_HANDLE,
+      .subpass = 0,
+  };
+
+  if (vkCreateGraphicsPipelines(mDevice, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &mGraphicsPipeline) != VK_SUCCESS)
+  {
+    throw std::runtime_error("Failed to create graphics pipeline");
+  }
+
+  std::cout << "Vulkan Graphics Pipeline created successfully" << std::endl;
+
+  vkDestroyShaderModule(mDevice, fragShaderModule, nullptr);
+  vkDestroyShaderModule(mDevice, vertShaderModule, nullptr);
 }
