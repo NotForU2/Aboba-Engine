@@ -11,10 +11,22 @@ void VulkanRenderer::Init(SDL_Window *window)
   CreateSwapchain();
   CreateImageViews();
   CreateGraphicsPipeline();
+  CreateCommandPool();
+  CreateCommandBuffers();
+  CreateSyncObjects();
 }
 
 void VulkanRenderer::Cleanup()
 {
+  vkDeviceWaitIdle(mDevice);
+
+  for (size_t i = 0; i != MAX_FRAMES_IN_FLIGHT; ++i)
+  {
+    vkDestroySemaphore(mDevice, mRenderFinishedSemaphores[i], nullptr);
+    vkDestroySemaphore(mDevice, mImageAvailableSemaphores[i], nullptr);
+    vkDestroyFence(mDevice, mInFlightFences[i], nullptr);
+  }
+  vkDestroyCommandPool(mDevice, mCommandPool, nullptr);
   vkDestroyPipeline(mDevice, mGraphicsPipeline, nullptr);
   vkDestroyPipelineLayout(mDevice, mPipelineLayout, nullptr);
   for (auto imageView : mSwapchainImageViews)
@@ -168,14 +180,14 @@ void VulkanRenderer::PickPhysicalDevice()
   }
 }
 
-int VulkanRenderer::RateDeviceSuitability(VkPhysicalDevice device)
+uint32_t VulkanRenderer::RateDeviceSuitability(VkPhysicalDevice device)
 {
   VkPhysicalDeviceProperties2 deviceProperties{
       .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2,
   };
   vkGetPhysicalDeviceProperties2(device, &deviceProperties);
 
-  int score = 0;
+  uint32_t score = 0;
 
   if (deviceProperties.properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU)
   {
@@ -247,7 +259,7 @@ QueueFamilyIndices VulkanRenderer::FindQueueFamilies(VkPhysicalDevice device)
   std::vector<VkQueueFamilyProperties2> queueFamilies(queueFamilyCount, defaultFamilyProperties2);
   vkGetPhysicalDeviceQueueFamilyProperties2(device, &queueFamilyCount, queueFamilies.data());
 
-  for (size_t i = 0; i != queueFamilies.size(); i++)
+  for (size_t i = 0; i != queueFamilies.size(); ++i)
   {
     if (queueFamilies[i].queueFamilyProperties.queueFlags & VK_QUEUE_GRAPHICS_BIT)
     {
@@ -529,7 +541,7 @@ void VulkanRenderer::CreateImageViews()
 {
   mSwapchainImageViews.resize(mSwapchainImages.size());
 
-  for (size_t i = 0; i != mSwapchainImages.size(); i++)
+  for (size_t i = 0; i != mSwapchainImages.size(); ++i)
   {
     VkImageViewCreateInfo createInfo{
         .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
@@ -727,4 +739,291 @@ void VulkanRenderer::CreateGraphicsPipeline()
 
   vkDestroyShaderModule(mDevice, fragShaderModule, nullptr);
   vkDestroyShaderModule(mDevice, vertShaderModule, nullptr);
+}
+
+void VulkanRenderer::CreateCommandPool()
+{
+  VkCommandPoolCreateInfo poolInfo{
+      .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+      .flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
+      .queueFamilyIndex = mQueueFamilyIndices.graphicsFamily.value(),
+  };
+  if (vkCreateCommandPool(mDevice, &poolInfo, nullptr, &mCommandPool) != VK_SUCCESS)
+  {
+    throw std::runtime_error("Failed to create command pool");
+  }
+}
+
+void VulkanRenderer::CreateCommandBuffers()
+{
+  mCommandBuffers.resize(MAX_FRAMES_IN_FLIGHT);
+
+  VkCommandBufferAllocateInfo allocInfo{
+      .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+      .commandPool = mCommandPool,
+      .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+      .commandBufferCount = static_cast<uint32_t>(mCommandBuffers.size()),
+  };
+  if (vkAllocateCommandBuffers(mDevice, &allocInfo, mCommandBuffers.data()) != VK_SUCCESS)
+  {
+    throw std::runtime_error("Failed to allocate command buffers");
+  }
+}
+
+void VulkanRenderer::CreateSyncObjects()
+{
+  mImageAvailableSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
+  mRenderFinishedSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
+  mInFlightFences.resize(MAX_FRAMES_IN_FLIGHT);
+
+  VkSemaphoreCreateInfo semaphoreInfo{
+      .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
+  };
+  VkFenceCreateInfo fenceInfo{
+      .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
+      .flags = VK_FENCE_CREATE_SIGNALED_BIT,
+  };
+
+  for (size_t i = 0; i != MAX_FRAMES_IN_FLIGHT; ++i)
+  {
+    if (vkCreateSemaphore(mDevice, &semaphoreInfo, nullptr, &mImageAvailableSemaphores[i]) != VK_SUCCESS ||
+        vkCreateSemaphore(mDevice, &semaphoreInfo, nullptr, &mRenderFinishedSemaphores[i]) != VK_SUCCESS ||
+        vkCreateFence(mDevice, &fenceInfo, nullptr, &mInFlightFences[i]) != VK_SUCCESS)
+    {
+      throw std::runtime_error("Failed to create sync objects for a frame");
+    }
+  }
+}
+
+void VulkanRenderer::CreatePipelineBarrierEntry(VkCommandBuffer commandBuffer, uint32_t imageIndex)
+{
+  VkImageMemoryBarrier2 barrier{
+      .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+      .srcStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+      .srcAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
+      .dstStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+      .dstAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
+      .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+      .newLayout = VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL,
+      .image = mSwapchainImages[imageIndex],
+      .subresourceRange = {
+          .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+          .baseMipLevel = 0,
+          .levelCount = 1,
+          .baseArrayLayer = 0,
+          .layerCount = 1,
+      },
+  };
+
+  VkDependencyInfo dependencyInfo{
+      .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+      .imageMemoryBarrierCount = 1,
+      .pImageMemoryBarriers = &barrier,
+  };
+  vkCmdPipelineBarrier2(commandBuffer, &dependencyInfo);
+};
+
+void VulkanRenderer::CreatePipelineBarrierOut(VkCommandBuffer commandBuffer, uint32_t imageIndex)
+{
+  VkImageMemoryBarrier2 barrier{
+      .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+      .srcStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+      .srcAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
+      .dstStageMask = VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT,
+      .dstAccessMask = 0,
+      .oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+      .newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+      .image = mSwapchainImages[imageIndex],
+      .subresourceRange = {
+          .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+          .baseMipLevel = 0,
+          .levelCount = 1,
+          .baseArrayLayer = 0,
+          .layerCount = 1,
+      },
+  };
+
+  VkDependencyInfo dependencyInfo{
+      .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+      .imageMemoryBarrierCount = 1,
+      .pImageMemoryBarriers = &barrier,
+  };
+  vkCmdPipelineBarrier2(commandBuffer, &dependencyInfo);
+};
+
+void VulkanRenderer::RecordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex)
+{
+  VkCommandBufferBeginInfo beginInfo{
+      .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+  };
+
+  if (vkBeginCommandBuffer(commandBuffer, &beginInfo) != VK_SUCCESS)
+  {
+    throw std::runtime_error("Failed to begin recording command buffer");
+  }
+
+  CreatePipelineBarrierEntry(commandBuffer, imageIndex);
+
+  // Переводим изображение из формата "Непонятно что" в "Куда можно рисовать цвет"
+  // Для простоты пока опустим явные барьеры ImageMemoryBarrier,
+  // так как Subpass Dependencies в RenderPass делали это за нас,
+  // но в Dynamic Rendering Swapchain обычно сам справляется при правильной настройке,
+  // однако правильнее будет сделать Transition Layout.
+  // ДЛЯ ПЕРВОГО ТРЕУГОЛЬНИКА Vulkan часто прощает отсутствие явного барьера здесь,
+  // потом понадобится PipelineBarrier для перехода layout.
+
+  // Настройка Dynamic Rendering
+  VkRenderingAttachmentInfo colorAttachment{
+      .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
+      .imageView = mSwapchainImageViews[imageIndex],
+      .imageLayout = VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL,
+      .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+      .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+      .clearValue = {
+          {{
+              0.0f,
+              0.0f,
+              0.0f,
+              0.1f,
+          }}},
+  };
+  VkRenderingInfo renderingInfo{
+      .sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
+      .renderArea = {
+          .offset = {
+              0,
+              0,
+          },
+          .extent = mSwapchainExtent,
+      },
+      .layerCount = 1,
+      .colorAttachmentCount = 1,
+      .pColorAttachments = &colorAttachment,
+  };
+
+  // Render start
+  vkCmdBeginRendering(commandBuffer, &renderingInfo);
+  vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mGraphicsPipeline);
+
+  VkViewport viewport{
+      .x = 0.0f,
+      .y = 0.0f,
+      .width = static_cast<float>(mSwapchainExtent.width),
+      .height = static_cast<float>(mSwapchainExtent.height),
+      .minDepth = 0.0f,
+      .maxDepth = 1.0f,
+  };
+  vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
+
+  VkRect2D scissor{
+      .offset = {
+          0,
+          0,
+      },
+      .extent = mSwapchainExtent,
+  };
+  vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
+
+  // Draw
+  vkCmdDraw(commandBuffer, 3, 1, 0, 0);
+
+  vkCmdEndRendering(commandBuffer);
+
+  // Pipeline Barrier
+  CreatePipelineBarrierOut(commandBuffer, imageIndex);
+
+  if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS)
+  {
+    throw std::runtime_error("Failed to record command buffer");
+  }
+}
+
+void VulkanRenderer::DrawFrame()
+{
+  // Ждем завершения предыдущего кадра
+  vkWaitForFences(mDevice, 1, &mInFlightFences[mCurrentFrame], VK_TRUE, UINT64_MAX);
+
+  // Индекс картинки из Swapchain
+  uint32_t imageIndex;
+  VkResult acquireNextImageResult = vkAcquireNextImageKHR(mDevice, mSwapchain, UINT64_MAX, mImageAvailableSemaphores[mCurrentFrame], VK_NULL_HANDLE, &imageIndex);
+
+  if (acquireNextImageResult == VK_ERROR_OUT_OF_DATE_KHR)
+  {
+    return;
+  }
+  else if (acquireNextImageResult != VK_SUCCESS && acquireNextImageResult != VK_SUBOPTIMAL_KHR)
+  {
+    throw std::runtime_error("Failed to acquire swapchain image");
+  }
+
+  // Сброс fances
+  vkResetFences(mDevice, 1, &mInFlightFences[mCurrentFrame]);
+
+  // Записываем команды
+  vkResetCommandBuffer(mCommandBuffers[mCurrentFrame], 0);
+  RecordCommandBuffer(mCommandBuffers[mCurrentFrame], imageIndex);
+
+  // Инфо Semaphore ожидания
+  VkSemaphoreSubmitInfo waitSemaphoreInfo{
+      .sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
+      .semaphore = mImageAvailableSemaphores[mCurrentFrame],
+      .value = 1,
+      .stageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+      .deviceIndex = 0,
+  };
+
+  // Инфо Semaphore сигнала
+  VkSemaphoreSubmitInfo signalSemaphoreInfo{
+      .sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
+      .semaphore = mRenderFinishedSemaphores[mCurrentFrame],
+      .value = 1,
+      .stageMask = VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT,
+      .deviceIndex = 0,
+  };
+
+  // Инфо Commad Buffer
+  VkCommandBufferSubmitInfo commandBufferInfo{
+      .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO,
+      .commandBuffer = mCommandBuffers[mCurrentFrame],
+      .deviceMask = 0,
+  };
+
+  // Submit Info
+  VkSubmitInfo2 submitInfo{
+      .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2,
+      .waitSemaphoreInfoCount = 1,
+      .pWaitSemaphoreInfos = &waitSemaphoreInfo,
+      .commandBufferInfoCount = 1,
+      .pCommandBufferInfos = &commandBufferInfo,
+      .signalSemaphoreInfoCount = 1,
+      .pSignalSemaphoreInfos = &signalSemaphoreInfo,
+  };
+
+  if (vkQueueSubmit2(mGraphicsQueue, 1, &submitInfo, mInFlightFences[mCurrentFrame]) != VK_SUCCESS)
+  {
+    throw std::runtime_error("Failed to submit draw command biffer");
+  }
+
+  // Present
+  std::vector<VkSwapchainKHR> swapchains = {mSwapchain};
+  VkPresentInfoKHR presentInfo{
+      .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
+      .waitSemaphoreCount = 1,
+      .pWaitSemaphores = &mRenderFinishedSemaphores[mCurrentFrame],
+      .swapchainCount = 1,
+      .pSwapchains = swapchains.data(),
+      .pImageIndices = &imageIndex,
+  };
+
+  VkResult queuePresentResult = vkQueuePresentKHR(mPresentQueue, &presentInfo);
+
+  if (queuePresentResult == VK_ERROR_OUT_OF_DATE_KHR || queuePresentResult == VK_SUBOPTIMAL_KHR)
+  {
+  }
+  else if (queuePresentResult != VK_SUCCESS)
+  {
+    throw std::runtime_error("Failed to present swap chain image");
+  }
+
+  mCurrentFrame = (mCurrentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
 }

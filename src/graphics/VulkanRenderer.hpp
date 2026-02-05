@@ -12,6 +12,8 @@
 #include <algorithm>
 #include <fstream>
 
+const uint32_t MAX_FRAMES_IN_FLIGHT = 2;
+
 struct SwapchainSupportDetails
 {
   VkSurfaceCapabilities2KHR capabilities;
@@ -60,6 +62,14 @@ private:
   // Pipeline
   VkPipelineLayout mPipelineLayout;
   VkPipeline mGraphicsPipeline;
+  // Command Pool
+  VkCommandPool mCommandPool;
+  std::vector<VkCommandBuffer> mCommandBuffers;
+  // Sync
+  std::vector<VkSemaphore> mImageAvailableSemaphores;
+  std::vector<VkSemaphore> mRenderFinishedSemaphores;
+  std::vector<VkFence> mInFlightFences;
+  uint32_t mCurrentFrame = 0;
 
   const std::vector<const char *> validationLayers = {"VK_LAYER_KHRONOS_validation"};
   const std::vector<const char *> deviceExtensions = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
@@ -75,7 +85,7 @@ private:
   bool CheckValidationLayerSupport();
   // Device
   void PickPhysicalDevice();
-  int RateDeviceSuitability(VkPhysicalDevice device);
+  uint32_t RateDeviceSuitability(VkPhysicalDevice device);
   QueueFamilyIndices FindQueueFamilies(VkPhysicalDevice device);
   void CreateLogicalDevice();
   // Surface
@@ -91,4 +101,12 @@ private:
   static std::vector<char> ReadFile(const std::string &filename);
   VkShaderModule CreateShaderModule(const std::vector<char> &code);
   void CreateGraphicsPipeline();
+  // Pipeline Barrier
+  void CreatePipelineBarrierEntry(VkCommandBuffer commandBuffer, uint32_t imageIndex);
+  void CreatePipelineBarrierOut(VkCommandBuffer commandBuffer, uint32_t imageIndex);
+  // Command Pool
+  void CreateCommandPool();
+  void CreateCommandBuffers();
+  void RecordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex);
+  void CreateSyncObjects();
 };

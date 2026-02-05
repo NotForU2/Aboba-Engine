@@ -6,8 +6,7 @@ Window::Window() {}
 
 Window::~Window()
 {
-  // SDL_DestroyRenderer(mRenderer);
-  SDL_DestroyWindow(mWindow);
+  Cleanup();
 }
 
 SDL_Window *Window::GetWindow()
@@ -15,11 +14,11 @@ SDL_Window *Window::GetWindow()
   return mWindow;
 }
 
-bool Window::Init(const char *title, int width, int height)
+void Window::Init(const char *title, int width, int height)
 {
-  if (SDL_Init(SDL_INIT_VIDEO))
+  if (SDL_Init(SDL_INIT_VIDEO) != 0)
   {
-    return false;
+    throw std::runtime_error("SDL_Init failed");
   }
 
   mWindow = SDL_CreateWindow(
@@ -28,33 +27,25 @@ bool Window::Init(const char *title, int width, int height)
       SDL_WINDOWPOS_CENTERED,
       width,
       height,
-      SDL_WINDOW_VULKAN | SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE);
+      SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE);
 
   if (!mWindow)
   {
-    std::cerr << "[SDL Error]: " << SDL_GetError() << std::endl;
-    return false;
+    throw std::runtime_error("Failed to create window");
   }
-
-  // if (!mRenderer)
-  // {
-  //   Logger::Log(LogLevel::Error, "Failed to create renderer!");
-  //   return false;
-  // }
 
   mWidth = width;
   mHeight = height;
-
-  return true;
 }
 
-void Window::Clear()
+bool Window::CanRender()
 {
-  // SDL_SetRenderDrawColor(mRenderer, 15, 15, 25, 255);
-  // SDL_RenderClear(mRenderer);
+  Uint32 notPresent = SDL_GetWindowFlags(mWindow) & SDL_WINDOW_MINIMIZED;
+  return !notPresent;
 }
 
-void Window::Present()
+void Window::Cleanup()
 {
-  // SDL_RenderPresent(mRenderer);
+  SDL_DestroyWindow(mWindow);
+  SDL_Quit();
 }
