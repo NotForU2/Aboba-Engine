@@ -23,6 +23,9 @@ private:
   void Update(float dt);
   void Render();
 
+  const char *mAppName = "Aboba Engine";
+  const char *mEngineName = "Aboba Engine";
+
   entt::registry mRegistry;
   Window mWindow;
   bool mIsRunning;

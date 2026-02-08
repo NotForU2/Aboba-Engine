@@ -14,6 +14,7 @@
 #include <algorithm>
 #include <fstream>
 #include "wrappers/VulkanBuffer.hpp"
+#include "wrappers/VulkanContext.hpp"
 
 const uint32_t MAX_FRAMES_IN_FLIGHT = 2;
 
@@ -22,17 +23,6 @@ struct SwapchainSupportDetails
   VkSurfaceCapabilities2KHR capabilities;
   std::vector<VkSurfaceFormat2KHR> formats;
   std::vector<VkPresentModeKHR> presentModes;
-};
-
-struct QueueFamilyIndices
-{
-  std::optional<uint32_t> graphicsFamily;
-  std::optional<uint32_t> presentFamily;
-
-  bool isComplete()
-  {
-    return graphicsFamily.has_value() && presentFamily.has_value();
-  }
 };
 
 struct Vertex
@@ -44,24 +34,13 @@ struct Vertex
 class VulkanRenderer
 {
 public:
-  void Init(SDL_Window *window);
+  void Init(SDL_Window *window, const char *appName, const char *engineName);
   void Cleanup();
   void DrawFrame();
   void DeviceWaitIdle();
 
 private:
-  // Window
-  SDL_Window *mWindow;
-  // Instance
-  VkInstance mInstance;
-  // Device
-  VkPhysicalDevice mPhysicalDevice = VK_NULL_HANDLE;
-  QueueFamilyIndices mQueueFamilyIndices;
-  VkDevice mDevice;
-  VkQueue mGraphicsQueue;
-  // Surface
-  VkSurfaceKHR mSurface;
-  VkQueue mPresentQueue;
+  VulkanContext mContext;
   // Swapchain
   VkSwapchainKHR mSwapchain;
   std::vector<VkImage> mSwapchainImages;
@@ -71,18 +50,17 @@ private:
   // Pipeline
   VkPipelineLayout mPipelineLayout;
   VkPipeline mGraphicsPipeline;
-  // Command Pool
-  VkCommandPool mCommandPool;
+  // Command Buffers
   std::vector<VkCommandBuffer> mCommandBuffers;
   // Sync
   std::vector<VkSemaphore> mImageAvailableSemaphores;
   std::vector<VkSemaphore> mRenderFinishedSemaphores;
   std::vector<VkFence> mInFlightFences;
   uint32_t mCurrentFrame = 0;
-  // VMA
-  VmaAllocator mAllocator;
   // Buffer
   VulkanBuffer mVertexBuffer;
+  VulkanBuffer mIndexBuffer;
+  uint32_t mIndicesCount = 0;
 
   const std::vector<const char *> validationLayers = {"VK_LAYER_KHRONOS_validation"};
   const std::vector<const char *> deviceExtensions = {
@@ -90,22 +68,6 @@ private:
       VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME,
   };
 
-#ifdef NDEBUG
-  const bool enableValidationLayers = false;
-#else
-  const bool enableValidationLayers = true;
-#endif
-
-  // Instance
-  void CreateInstance();
-  bool CheckValidationLayerSupport();
-  // Device
-  void PickPhysicalDevice();
-  uint32_t RateDeviceSuitability(VkPhysicalDevice device);
-  QueueFamilyIndices FindQueueFamilies(VkPhysicalDevice device);
-  void CreateLogicalDevice();
-  // Surface
-  void CreateSurface();
   // Swapchain
   void CreateSwapchain();
   void CreateImageViews();
@@ -121,12 +83,10 @@ private:
   void CreatePipelineBarrierEntry(VkCommandBuffer commandBuffer, uint32_t imageIndex);
   void CreatePipelineBarrierOut(VkCommandBuffer commandBuffer, uint32_t imageIndex);
   // Command Pool
-  void CreateCommandPool();
   void CreateCommandBuffers();
   void RecordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex);
   // Sync
   void CreateSyncObjects();
   // VMA
-  void CreateAllocator();
-  void CreateVertexBuffer();
+  void CreateBuffers();
 };

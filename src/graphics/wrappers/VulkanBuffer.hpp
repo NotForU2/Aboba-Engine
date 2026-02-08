@@ -18,14 +18,8 @@ public:
   void Destroy(VmaAllocator allocator);
   void Upload(VmaAllocator allocator, const void *data, size_t size);
 
-  VkBuffer GetBuffer() const
-  {
-    return mBuffer;
-  }
-  VkDeviceSize GetSize() const
-  {
-    return mSize;
-  }
+  VkBuffer GetBuffer() const { return mBuffer; }
+  VkDeviceSize GetSize() const { return mSize; }
 
   VkDeviceAddress GetDeviceAddress(VkDevice device) const;
 

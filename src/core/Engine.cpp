@@ -12,7 +12,7 @@ bool Engine::Init()
 {
   try
   {
-    mWindow.Init("Aboba Engine", 800, 600);
+    mWindow.Init(mAppName, 800, 600);
   }
   catch (const std::exception &e)
   {
@@ -22,7 +22,7 @@ bool Engine::Init()
 
   try
   {
-    mVulkanRenderer.Init(mWindow.GetWindow());
+    mVulkanRenderer.Init(mWindow.GetWindow(), mAppName, mEngineName);
   }
   catch (const std::exception &e)
   {
