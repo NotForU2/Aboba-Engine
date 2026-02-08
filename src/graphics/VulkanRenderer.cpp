@@ -1,3 +1,4 @@
+#define VMA_IMPLEMENTATION
 #include "VulkanRenderer.hpp"
 
 void VulkanRenderer::Init(SDL_Window *window)
@@ -8,6 +9,8 @@ void VulkanRenderer::Init(SDL_Window *window)
   CreateSurface();
   PickPhysicalDevice();
   CreateLogicalDevice();
+  CreateAllocator();
+  CreateVertexBuffer();
   CreateSwapchain();
   CreateImageViews();
   CreateGraphicsPipeline();
@@ -22,9 +25,12 @@ void VulkanRenderer::Cleanup()
 
   for (size_t i = 0; i != MAX_FRAMES_IN_FLIGHT; ++i)
   {
-    vkDestroySemaphore(mDevice, mRenderFinishedSemaphores[i], nullptr);
     vkDestroySemaphore(mDevice, mImageAvailableSemaphores[i], nullptr);
     vkDestroyFence(mDevice, mInFlightFences[i], nullptr);
+  }
+  for (size_t i = 0; i != mRenderFinishedSemaphores.size(); ++i)
+  {
+    vkDestroySemaphore(mDevice, mRenderFinishedSemaphores[i], nullptr);
   }
   vkDestroyCommandPool(mDevice, mCommandPool, nullptr);
   vkDestroyPipeline(mDevice, mGraphicsPipeline, nullptr);
@@ -34,6 +40,8 @@ void VulkanRenderer::Cleanup()
     vkDestroyImageView(mDevice, imageView, nullptr);
   }
   vkDestroySwapchainKHR(mDevice, mSwapchain, nullptr);
+  mVertexBuffer.Destroy(mAllocator);
+  vmaDestroyAllocator(mAllocator);
   vkDestroyDevice(mDevice, nullptr);
   vkDestroySurfaceKHR(mInstance, mSurface, nullptr);
   vkDestroyInstance(mInstance, nullptr);
@@ -306,6 +314,7 @@ void VulkanRenderer::CreateLogicalDevice()
   // Vulkan 1.2
   VkPhysicalDeviceVulkan12Features features12{
       .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
+      .bufferDeviceAddress = VK_TRUE,
   };
   // Vulkan 1.3
   VkPhysicalDeviceVulkan13Features features13{
@@ -634,10 +643,36 @@ void VulkanRenderer::CreateGraphicsPipeline()
   };
 
   // Vertex Input
+  VkVertexInputAttributeDescription attributeDescriptionPosition{
+      .location = 0,
+      .binding = 0,
+      .format = VK_FORMAT_R32G32_SFLOAT,
+      .offset = offsetof(Vertex, pos),
+  };
+  VkVertexInputAttributeDescription attributeDescriptionColor{
+      .location = 1,
+      .binding = 0,
+      .format = VK_FORMAT_R32G32B32_SFLOAT,
+      .offset = offsetof(Vertex, color),
+  };
+
+  std::vector<VkVertexInputAttributeDescription> attributeDescriptions = {
+      attributeDescriptionPosition,
+      attributeDescriptionColor,
+  };
+
+  VkVertexInputBindingDescription bindingDescription{
+      .binding = 0,
+      .stride = sizeof(Vertex),
+      .inputRate = VK_VERTEX_INPUT_RATE_VERTEX,
+  };
+
   VkPipelineVertexInputStateCreateInfo vertexInputInfo{
       .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
-      .vertexBindingDescriptionCount = 0,
-      .vertexAttributeDescriptionCount = 0,
+      .vertexBindingDescriptionCount = 1,
+      .pVertexBindingDescriptions = &bindingDescription,
+      .vertexAttributeDescriptionCount = static_cast<uint32_t>(attributeDescriptions.size()),
+      .pVertexAttributeDescriptions = attributeDescriptions.data(),
   };
 
   // Input Assembly
@@ -700,6 +735,7 @@ void VulkanRenderer::CreateGraphicsPipeline()
   VkPipelineLayoutCreateInfo pipelineLayoutInfo{
       .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
   };
+
   if (vkCreatePipelineLayout(mDevice, &pipelineLayoutInfo, nullptr, &mPipelineLayout) != VK_SUCCESS)
   {
     throw std::runtime_error("Failed to create pipeline layout");
@@ -773,7 +809,7 @@ void VulkanRenderer::CreateCommandBuffers()
 void VulkanRenderer::CreateSyncObjects()
 {
   mImageAvailableSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
-  mRenderFinishedSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
+  mRenderFinishedSemaphores.resize(mSwapchainImages.size());
   mInFlightFences.resize(MAX_FRAMES_IN_FLIGHT);
 
   VkSemaphoreCreateInfo semaphoreInfo{
@@ -787,8 +823,15 @@ void VulkanRenderer::CreateSyncObjects()
   for (size_t i = 0; i != MAX_FRAMES_IN_FLIGHT; ++i)
   {
     if (vkCreateSemaphore(mDevice, &semaphoreInfo, nullptr, &mImageAvailableSemaphores[i]) != VK_SUCCESS ||
-        vkCreateSemaphore(mDevice, &semaphoreInfo, nullptr, &mRenderFinishedSemaphores[i]) != VK_SUCCESS ||
         vkCreateFence(mDevice, &fenceInfo, nullptr, &mInFlightFences[i]) != VK_SUCCESS)
+    {
+      throw std::runtime_error("Failed to create sync objects for a frame");
+    }
+  }
+
+  for (size_t i = 0; i != mSwapchainImages.size(); ++i)
+  {
+    if (vkCreateSemaphore(mDevice, &semaphoreInfo, nullptr, &mRenderFinishedSemaphores[i]) != VK_SUCCESS)
     {
       throw std::runtime_error("Failed to create sync objects for a frame");
     }
@@ -924,6 +967,11 @@ void VulkanRenderer::RecordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t
   };
   vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
+  // Bind buffer
+  std::vector<VkBuffer> vertexBuffer = {mVertexBuffer.GetBuffer()};
+  std::vector<VkDeviceSize> offsets = {0};
+  vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffer.data(), offsets.data());
+
   // Draw
   vkCmdDraw(commandBuffer, 3, 1, 0, 0);
 
@@ -975,7 +1023,7 @@ void VulkanRenderer::DrawFrame()
   // Инфо Semaphore сигнала
   VkSemaphoreSubmitInfo signalSemaphoreInfo{
       .sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
-      .semaphore = mRenderFinishedSemaphores[mCurrentFrame],
+      .semaphore = mRenderFinishedSemaphores[imageIndex],
       .value = 1,
       .stageMask = VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT,
       .deviceIndex = 0,
@@ -1009,7 +1057,7 @@ void VulkanRenderer::DrawFrame()
   VkPresentInfoKHR presentInfo{
       .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
       .waitSemaphoreCount = 1,
-      .pWaitSemaphores = &mRenderFinishedSemaphores[mCurrentFrame],
+      .pWaitSemaphores = &mRenderFinishedSemaphores[imageIndex],
       .swapchainCount = 1,
       .pSwapchains = swapchains.data(),
       .pImageIndices = &imageIndex,
@@ -1026,4 +1074,46 @@ void VulkanRenderer::DrawFrame()
   }
 
   mCurrentFrame = (mCurrentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
+}
+
+void VulkanRenderer::CreateAllocator()
+{
+  VmaAllocatorCreateInfo allocatorInfo{
+      .flags = VMA_ALLOCATOR_CREATE_BUFFER_DEVICE_ADDRESS_BIT,
+      .physicalDevice = mPhysicalDevice,
+      .device = mDevice,
+      .instance = mInstance,
+  };
+
+  if (vmaCreateAllocator(&allocatorInfo, &mAllocator) != VK_SUCCESS)
+  {
+    throw std::runtime_error("Failed to create VMA allocator");
+  }
+}
+
+void VulkanRenderer::CreateVertexBuffer()
+{
+  std::vector<Vertex> vertices = {
+      {
+          {0.0f, -0.5f},
+          {1.0f, 0.0f, 0.0f},
+      },
+      {
+          {0.5f, 0.5f},
+          {0.0f, 1.0f, 0.0f},
+      },
+      {
+          {-0.5f, 0.5f},
+          {0.0f, 0.0f, 1.0f},
+      }};
+
+  VkDeviceSize bufferSize = sizeof(Vertex) * vertices.size();
+
+  mVertexBuffer.Create(mAllocator,
+                       bufferSize,
+                       VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+                       VMA_MEMORY_USAGE_AUTO,
+                       VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT);
+
+  mVertexBuffer.Upload(mAllocator, vertices.data(), bufferSize);
 }

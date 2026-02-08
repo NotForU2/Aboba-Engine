@@ -8,6 +8,7 @@ find_package(SDL2 REQUIRED)
 find_package(EnTT REQUIRED)
 find_package(glm REQUIRED)
 find_package(Vulkan REQUIRED)
+find_package(VulkanMemoryAllocator REQUIRED)
 
 add_executable(Aboba-Engine 
   src/main.cpp
@@ -17,6 +18,7 @@ add_executable(Aboba-Engine
   src/system/RenderSystem.cpp
   src/system/CollisionSystem.cpp
   src/graphics/VulkanRenderer.cpp
+  src/graphics/wrappers/VulkanBuffer.cpp
 )
 
 target_link_libraries(Aboba-Engine PRIVATE
@@ -25,4 +27,5 @@ target_link_libraries(Aboba-Engine PRIVATE
   EnTT::EnTT
   glm::glm
   Vulkan::Vulkan
+  GPUOpen::VulkanMemoryAllocator
 )

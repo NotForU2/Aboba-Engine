@@ -2,6 +2,8 @@
 #include <vulkan/vulkan.h>
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_vulkan.h>
+#include <vk_mem_alloc.h>
+#include <glm/glm.hpp>
 #include <vector>
 #include <stdexcept>
 #include <iostream>
@@ -11,6 +13,7 @@
 #include <set>
 #include <algorithm>
 #include <fstream>
+#include "wrappers/VulkanBuffer.hpp"
 
 const uint32_t MAX_FRAMES_IN_FLIGHT = 2;
 
@@ -30,6 +33,12 @@ struct QueueFamilyIndices
   {
     return graphicsFamily.has_value() && presentFamily.has_value();
   }
+};
+
+struct Vertex
+{
+  glm::vec2 pos;
+  glm::vec3 color;
 };
 
 class VulkanRenderer
@@ -70,9 +79,16 @@ private:
   std::vector<VkSemaphore> mRenderFinishedSemaphores;
   std::vector<VkFence> mInFlightFences;
   uint32_t mCurrentFrame = 0;
+  // VMA
+  VmaAllocator mAllocator;
+  // Buffer
+  VulkanBuffer mVertexBuffer;
 
   const std::vector<const char *> validationLayers = {"VK_LAYER_KHRONOS_validation"};
-  const std::vector<const char *> deviceExtensions = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
+  const std::vector<const char *> deviceExtensions = {
+      VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+      VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME,
+  };
 
 #ifdef NDEBUG
   const bool enableValidationLayers = false;
@@ -108,5 +124,9 @@ private:
   void CreateCommandPool();
   void CreateCommandBuffers();
   void RecordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex);
+  // Sync
   void CreateSyncObjects();
+  // VMA
+  void CreateAllocator();
+  void CreateVertexBuffer();
 };

@@ -9,6 +9,7 @@
       ]
     },
     "stb",
-    "vulkan"
+    "vulkan",
+    "vulkan-memory-allocator"
   ]
 }
