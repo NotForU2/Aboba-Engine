@@ -62,12 +62,6 @@ private:
   VulkanBuffer mIndexBuffer;
   uint32_t mIndicesCount = 0;
 
-  const std::vector<const char *> validationLayers = {"VK_LAYER_KHRONOS_validation"};
-  const std::vector<const char *> deviceExtensions = {
-      VK_KHR_SWAPCHAIN_EXTENSION_NAME,
-      VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME,
-  };
-
   // Swapchain
   void CreateSwapchain();
   void CreateImageViews();

@@ -744,17 +744,41 @@ void VulkanRenderer::CreateBuffers()
   VkDeviceSize vertexBufferSize = sizeof(Vertex) * vertices.size();
   VkDeviceSize indexBufferSize = sizeof(uint32_t) * indices.size();
 
+  // Vertex
+  VulkanBuffer stagingBufferVertex;
+  stagingBufferVertex.Create(mContext.GetAllocator(),
+                             vertexBufferSize,
+                             VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                             VMA_MEMORY_USAGE_AUTO,
+                             VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT);
+  stagingBufferVertex.Upload(mContext.GetAllocator(), vertices.data(), vertexBufferSize);
+
   mVertexBuffer.Create(mContext.GetAllocator(),
                        vertexBufferSize,
-                       VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-                       VMA_MEMORY_USAGE_AUTO,
-                       VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT);
-  mVertexBuffer.Upload(mContext.GetAllocator(), vertices.data(), vertexBufferSize);
+                       VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+                       VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE,
+                       0);
+
+  mContext.CopyBuffer(stagingBufferVertex.GetBuffer(), mVertexBuffer.GetBuffer(), vertexBufferSize);
+
+  stagingBufferVertex.Destroy(mContext.GetAllocator());
+
+  // Index
+  VulkanBuffer stagingBufferIndex;
+  stagingBufferIndex.Create(mContext.GetAllocator(),
+                            indexBufferSize,
+                            VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                            VMA_MEMORY_USAGE_AUTO,
+                            VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT);
+  stagingBufferIndex.Upload(mContext.GetAllocator(), indices.data(), indexBufferSize);
 
   mIndexBuffer.Create(mContext.GetAllocator(),
                       indexBufferSize,
-                      VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-                      VMA_MEMORY_USAGE_AUTO,
-                      VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT);
-  mIndexBuffer.Upload(mContext.GetAllocator(), indices.data(), indexBufferSize);
+                      VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+                      VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE,
+                      0);
+
+  mContext.CopyBuffer(stagingBufferIndex.GetBuffer(), mIndexBuffer.GetBuffer(), indexBufferSize);
+
+  stagingBufferIndex.Destroy(mContext.GetAllocator());
 }

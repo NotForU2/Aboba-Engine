@@ -52,6 +52,7 @@ public:
 
   VkCommandBuffer BeginSingleTimeCommands();
   void EndSingleTimeCommands(VkCommandBuffer commandBuffer);
+  void CopyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size);
 
 private:
   SDL_Window *mWindow;

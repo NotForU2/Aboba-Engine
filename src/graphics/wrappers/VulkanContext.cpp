@@ -388,3 +388,62 @@ void VulkanContext::CreateAllocator()
     throw std::runtime_error("Failed to create VMA allocator");
   }
 }
+
+VkCommandBuffer VulkanContext::BeginSingleTimeCommands()
+{
+  VkCommandBufferAllocateInfo allocInfo{
+      .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+      .commandPool = mCommandPool,
+      .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+      .commandBufferCount = 1,
+  };
+
+  VkCommandBuffer commandBuffer;
+  vkAllocateCommandBuffers(mDevice, &allocInfo, &commandBuffer);
+
+  VkCommandBufferBeginInfo beginInfo{
+      .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+      .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
+  };
+  vkBeginCommandBuffer(commandBuffer, &beginInfo);
+
+  return commandBuffer;
+}
+
+void VulkanContext::EndSingleTimeCommands(VkCommandBuffer commandBuffer)
+{
+  vkEndCommandBuffer(commandBuffer);
+
+  VkCommandBufferSubmitInfo cmdBufInfo{
+      .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO,
+      .commandBuffer = commandBuffer,
+      .deviceMask = 0,
+  };
+
+  VkSubmitInfo2 submitInfo{
+      .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2,
+      .commandBufferInfoCount = 1,
+      .pCommandBufferInfos = &cmdBufInfo,
+  };
+
+  vkQueueSubmit2(mGraphicsQueue, 1, &submitInfo, VK_NULL_HANDLE);
+
+  vkQueueWaitIdle(mGraphicsQueue);
+
+  vkFreeCommandBuffers(mDevice, mCommandPool, 1, &commandBuffer);
+}
+
+void VulkanContext::CopyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size)
+{
+  VkCommandBuffer commandBuffer = BeginSingleTimeCommands();
+
+  VkBufferCopy copyRegion{
+      .srcOffset = 0,
+      .dstOffset = 0,
+      .size = size,
+  };
+
+  vkCmdCopyBuffer(commandBuffer, srcBuffer, dstBuffer, 1, &copyRegion);
+
+  EndSingleTimeCommands(commandBuffer);
+}
