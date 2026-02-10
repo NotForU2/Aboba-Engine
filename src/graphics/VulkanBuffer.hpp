@@ -17,8 +17,13 @@ public:
   void Create(VmaAllocator allocator, VkDeviceSize size, VkBufferUsageFlags bufferUsage, VmaMemoryUsage memoryUsage, VmaAllocationCreateFlags vmaFlags = 0);
   void Destroy(VmaAllocator allocator);
   void Upload(VmaAllocator allocator, const void *data, size_t size);
+  void *Map(VmaAllocator allocator);
+  void Unmap(VmaAllocator allocator);
 
-  VkBuffer GetBuffer() const { return mBuffer; }
+  VkBuffer GetBuffer() const
+  {
+    return mBuffer;
+  }
   VkDeviceSize GetSize() const { return mSize; }
 
   VkDeviceAddress GetDeviceAddress(VkDevice device) const;

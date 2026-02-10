@@ -79,3 +79,20 @@ VkDeviceAddress VulkanBuffer::GetDeviceAddress(VkDevice device) const
 
   return vkGetBufferDeviceAddress(device, &bufferDeviceAddressInfo);
 }
+
+void *VulkanBuffer::Map(VmaAllocator allocator)
+{
+  void *mappedData = nullptr;
+
+  if (vmaMapMemory(allocator, mAllocation, &mappedData) != VK_SUCCESS)
+  {
+    throw std::runtime_error("Failed to map buffer memort");
+  }
+
+  return mappedData;
+}
+
+void VulkanBuffer::Unmap(VmaAllocator allocator)
+{
+  vmaUnmapMemory(allocator, mAllocation);
+}

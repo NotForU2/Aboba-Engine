@@ -13,10 +13,19 @@
 #include <set>
 #include <algorithm>
 #include <fstream>
-#include "wrappers/VulkanBuffer.hpp"
-#include "wrappers/VulkanContext.hpp"
+#include <chrono>
+#include "VulkanBuffer.hpp"
+#include "VulkanContext.hpp"
+#include "Camera.hpp"
 
 const uint32_t MAX_FRAMES_IN_FLIGHT = 2;
+
+struct UniformBufferObject
+{
+  alignas(16) glm::mat4 model;
+  alignas(16) glm::mat4 view;
+  alignas(16) glm::mat4 proj;
+};
 
 struct SwapchainSupportDetails
 {
@@ -41,46 +50,46 @@ public:
 
 private:
   VulkanContext mContext;
-  // Swapchain
   VkSwapchainKHR mSwapchain;
   std::vector<VkImage> mSwapchainImages;
   VkFormat mSwapchainImageFormat;
   VkExtent2D mSwapchainExtent;
   std::vector<VkImageView> mSwapchainImageViews;
-  // Pipeline
   VkPipelineLayout mPipelineLayout;
   VkPipeline mGraphicsPipeline;
-  // Command Buffers
   std::vector<VkCommandBuffer> mCommandBuffers;
-  // Sync
   std::vector<VkSemaphore> mImageAvailableSemaphores;
   std::vector<VkSemaphore> mRenderFinishedSemaphores;
   std::vector<VkFence> mInFlightFences;
   uint32_t mCurrentFrame = 0;
-  // Buffer
   VulkanBuffer mVertexBuffer;
   VulkanBuffer mIndexBuffer;
   uint32_t mIndicesCount = 0;
+  Camera mCamera;
+  VkDescriptorSetLayout mDescriptorSetLayout;
+  VkDescriptorPool mDescriptorPool;
+  std::vector<VkDescriptorSet> mDescriptorSets;
+  std::vector<VulkanBuffer> mUniformBuffers;
+  std::vector<void *> mUniformBuffersMapped;
 
-  // Swapchain
   void CreateSwapchain();
   void CreateImageViews();
   SwapchainSupportDetails QuerySwapchainSupport(VkPhysicalDevice device);
   VkSurfaceFormat2KHR ChooseSwapSurfaceFormat(const std::vector<VkSurfaceFormat2KHR> &availableFormats);
   VkPresentModeKHR ChooseSwapPresentMode(const std::vector<VkPresentModeKHR> &availablePresentModes);
   VkExtent2D ChooseSwapExtent(const VkSurfaceCapabilities2KHR &capabilities);
-  // Pipeline
   static std::vector<char> ReadFile(const std::string &filename);
   VkShaderModule CreateShaderModule(const std::vector<char> &code);
   void CreateGraphicsPipeline();
-  // Pipeline Barrier
   void CreatePipelineBarrierEntry(VkCommandBuffer commandBuffer, uint32_t imageIndex);
   void CreatePipelineBarrierOut(VkCommandBuffer commandBuffer, uint32_t imageIndex);
-  // Command Pool
   void CreateCommandBuffers();
   void RecordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex);
-  // Sync
   void CreateSyncObjects();
-  // VMA
   void CreateBuffers();
+  void CreateDescriptorSetLayout();
+  void CreateUniformBuffers();
+  void CreateDescriptorPool();
+  void CreateDescriptorSets();
+  void UpdateUniformBuffer(uint32_t currentImage);
 };

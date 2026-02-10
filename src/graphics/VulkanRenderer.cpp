@@ -3,11 +3,21 @@
 void VulkanRenderer::Init(SDL_Window *window, const char *appName, const char *engineName)
 {
   mContext.Init(window, appName, engineName);
-  CreateBuffers();
+
   CreateSwapchain();
   CreateImageViews();
+  mCamera.SetProjection(45.0f, mSwapchainExtent.width / mSwapchainExtent.height, 0.1f, 10.0f);
+
+  CreateDescriptorSetLayout();
+
   CreateGraphicsPipeline();
-  // CreateCommandPool();
+
+  CreateBuffers();
+  CreateUniformBuffers();
+
+  CreateDescriptorPool();
+  CreateDescriptorSets();
+
   CreateCommandBuffers();
   CreateSyncObjects();
 }
@@ -25,16 +35,28 @@ void VulkanRenderer::Cleanup()
   {
     vkDestroySemaphore(mContext.GetDevice(), mRenderFinishedSemaphores[i], nullptr);
   }
-  // vkDestroyCommandPool(mContext.GetDevice(), mCommandPool, nullptr);
+
+  vkDestroyDescriptorPool(mContext.GetDevice(), mDescriptorPool, nullptr);
+
+  for (size_t i = 0; i != MAX_FRAMES_IN_FLIGHT; ++i)
+  {
+    mUniformBuffers[i].Unmap(mContext.GetAllocator());
+    mUniformBuffers[i].Destroy(mContext.GetAllocator());
+  }
+  mVertexBuffer.Destroy(mContext.GetAllocator());
+  mIndexBuffer.Destroy(mContext.GetAllocator());
+
   vkDestroyPipeline(mContext.GetDevice(), mGraphicsPipeline, nullptr);
   vkDestroyPipelineLayout(mContext.GetDevice(), mPipelineLayout, nullptr);
+
+  vkDestroyDescriptorSetLayout(mContext.GetDevice(), mDescriptorSetLayout, nullptr);
+
   for (auto imageView : mSwapchainImageViews)
   {
     vkDestroyImageView(mContext.GetDevice(), imageView, nullptr);
   }
   vkDestroySwapchainKHR(mContext.GetDevice(), mSwapchain, nullptr);
-  mVertexBuffer.Destroy(mContext.GetAllocator());
-  mIndexBuffer.Destroy(mContext.GetAllocator());
+
   mContext.Cleanup();
 }
 
@@ -345,6 +367,8 @@ void VulkanRenderer::CreateGraphicsPipeline()
   // Pipeline Layout
   VkPipelineLayoutCreateInfo pipelineLayoutInfo{
       .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+      .setLayoutCount = 1,
+      .pSetLayouts = &mDescriptorSetLayout,
   };
 
   if (vkCreatePipelineLayout(mContext.GetDevice(), &pipelineLayoutInfo, nullptr, &mPipelineLayout) != VK_SUCCESS)
@@ -442,6 +466,8 @@ void VulkanRenderer::CreateCommandBuffers()
   {
     throw std::runtime_error("Failed to allocate command buffers");
   }
+
+  std::cout << "Vulkan Command Buffers created successfully" << std::endl;
 }
 
 void VulkanRenderer::CreateSyncObjects()
@@ -474,6 +500,8 @@ void VulkanRenderer::CreateSyncObjects()
       throw std::runtime_error("Failed to create sync objects for a frame");
     }
   }
+
+  std::cout << "Vulkan Sync Objects created successfully" << std::endl;
 }
 
 void VulkanRenderer::CreatePipelineBarrierEntry(VkCommandBuffer commandBuffer, uint32_t imageIndex)
@@ -612,6 +640,7 @@ void VulkanRenderer::RecordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t
 
   vkCmdBindIndexBuffer(commandBuffer, mIndexBuffer.GetBuffer(), 0, VK_INDEX_TYPE_UINT32);
 
+  vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mPipelineLayout, 0, 1, &mDescriptorSets[mCurrentFrame], 0, nullptr);
   // Draw
   vkCmdDrawIndexed(commandBuffer, mIndicesCount, 1, 0, 0, 0);
   vkCmdDraw(commandBuffer, 3, 1, 0, 0);
@@ -687,6 +716,8 @@ void VulkanRenderer::DrawFrame()
       .signalSemaphoreInfoCount = 1,
       .pSignalSemaphoreInfos = &signalSemaphoreInfo,
   };
+
+  UpdateUniformBuffer(mCurrentFrame);
 
   if (vkQueueSubmit2(mContext.GetGraphicsQueue(), 1, &submitInfo, mInFlightFences[mCurrentFrame]) != VK_SUCCESS)
   {
@@ -781,4 +812,127 @@ void VulkanRenderer::CreateBuffers()
   mContext.CopyBuffer(stagingBufferIndex.GetBuffer(), mIndexBuffer.GetBuffer(), indexBufferSize);
 
   stagingBufferIndex.Destroy(mContext.GetAllocator());
+}
+
+void VulkanRenderer::CreateDescriptorSetLayout()
+{
+  VkDescriptorSetLayoutBinding uboLayotBinding{
+      .binding = 0,
+      .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+      .descriptorCount = 1,
+      .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
+      .pImmutableSamplers = nullptr,
+  };
+  VkDescriptorSetLayoutCreateInfo layoutInfo{
+      .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+      .bindingCount = 1,
+      .pBindings = &uboLayotBinding,
+  };
+
+  if (vkCreateDescriptorSetLayout(mContext.GetDevice(), &layoutInfo, nullptr, &mDescriptorSetLayout) != VK_SUCCESS)
+  {
+    throw std::runtime_error("Failed to create descriptor set layout");
+  }
+
+  std::cout << "Vulkan Descriptor Set Layout created successfully" << std::endl;
+}
+
+void VulkanRenderer::CreateUniformBuffers()
+{
+  VkDeviceSize bufferSize = sizeof(UniformBufferObject);
+
+  mUniformBuffers.resize(MAX_FRAMES_IN_FLIGHT);
+  mUniformBuffersMapped.resize(MAX_FRAMES_IN_FLIGHT);
+
+  for (size_t i = 0; i != MAX_FRAMES_IN_FLIGHT; ++i)
+  {
+    // HOST_VISIBLE | HOST_COHERENT
+    // Идеально было бы DEVICE_LOCAL | HOST_VISIBLE (ReBar)
+    mUniformBuffers[i].Create(
+        mContext.GetAllocator(),
+        bufferSize,
+        VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+        VMA_MEMORY_USAGE_AUTO,
+        VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT);
+
+    mUniformBuffersMapped[i] = mUniformBuffers[i].Map(mContext.GetAllocator());
+  }
+
+  std::cout << "Vulkan Uniform Buffers created successfully" << std::endl;
+}
+
+void VulkanRenderer::CreateDescriptorPool()
+{
+  VkDescriptorPoolSize poolSize{
+      .type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+      .descriptorCount = MAX_FRAMES_IN_FLIGHT,
+  };
+  VkDescriptorPoolCreateInfo poolInfo{
+      .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+      .maxSets = MAX_FRAMES_IN_FLIGHT,
+      .poolSizeCount = 1,
+      .pPoolSizes = &poolSize,
+  };
+
+  if (vkCreateDescriptorPool(mContext.GetDevice(), &poolInfo, nullptr, &mDescriptorPool) != VK_SUCCESS)
+  {
+    throw std::runtime_error("Failed to create descriptor pool");
+  }
+
+  std::cout << "Vulkan Descriptor Pool created successfully" << std::endl;
+}
+
+void VulkanRenderer::CreateDescriptorSets()
+{
+  std::vector<VkDescriptorSetLayout> layouts(MAX_FRAMES_IN_FLIGHT, mDescriptorSetLayout);
+
+  VkDescriptorSetAllocateInfo allocInfo{
+      .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+      .descriptorPool = mDescriptorPool,
+      .descriptorSetCount = MAX_FRAMES_IN_FLIGHT,
+      .pSetLayouts = layouts.data(),
+  };
+
+  mDescriptorSets.resize(MAX_FRAMES_IN_FLIGHT);
+  if (vkAllocateDescriptorSets(mContext.GetDevice(), &allocInfo, mDescriptorSets.data()) != VK_SUCCESS)
+  {
+    throw std::runtime_error("Failed to allocate descriptor sets");
+  }
+
+  for (size_t i = 0; i != MAX_FRAMES_IN_FLIGHT; ++i)
+  {
+    VkDescriptorBufferInfo bufferInfo{
+        .buffer = mUniformBuffers[i].GetBuffer(),
+        .offset = 0,
+        .range = sizeof(UniformBufferObject),
+    };
+    VkWriteDescriptorSet descriptorWrite{
+        .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+        .dstSet = mDescriptorSets[i],
+        .dstBinding = 0,
+        .dstArrayElement = 0,
+        .descriptorCount = 1,
+        .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+        .pBufferInfo = &bufferInfo,
+    };
+
+    vkUpdateDescriptorSets(mContext.GetDevice(), 1, &descriptorWrite, 0, nullptr);
+  }
+
+  std::cout << "Vulkan Descriptor Sets created successfully" << std::endl;
+}
+
+void VulkanRenderer::UpdateUniformBuffer(uint32_t currentImage)
+{
+  static auto startTime = std::chrono::high_resolution_clock::now();
+  auto currentTime = std::chrono::high_resolution_clock::now();
+  float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
+
+  UniformBufferObject ubo{
+      .model = glm::rotate(glm::mat4(1.0f), time * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f)),
+      .view = mCamera.GetView(),
+      .proj = mCamera.GetProjection(),
+  };
+
+  memcpy(mUniformBuffersMapped[currentImage], &ubo, sizeof(ubo));
 }
