@@ -3,6 +3,7 @@
 void VulkanRenderer::Init(SDL_Window *window, const char *appName, const char *engineName)
 {
   mContext.Init(window, appName, engineName);
+  mTexture.Create(mContext, "textures/aaa.png");
 
   CreateSwapchain();
   CreateImageViews();
@@ -57,6 +58,7 @@ void VulkanRenderer::Cleanup()
   }
   vkDestroySwapchainKHR(mContext.GetDevice(), mSwapchain, nullptr);
 
+  mTexture.Destroy(mContext);
   mContext.Cleanup();
 }
 
@@ -329,7 +331,7 @@ void VulkanRenderer::CreateGraphicsPipeline()
       .rasterizerDiscardEnable = VK_FALSE,
       .polygonMode = VK_POLYGON_MODE_FILL,
       .cullMode = VK_CULL_MODE_BACK_BIT,
-      .frontFace = VK_FRONT_FACE_CLOCKWISE,
+      .frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE,
       .depthBiasEnable = VK_FALSE,
       .lineWidth = 1.0f,
   };

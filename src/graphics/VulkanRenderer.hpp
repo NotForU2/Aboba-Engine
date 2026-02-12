@@ -16,6 +16,7 @@
 #include <chrono>
 #include "VulkanBuffer.hpp"
 #include "VulkanContext.hpp"
+#include "VulkanTexture.hpp"
 #include "Camera.hpp"
 
 const uint32_t MAX_FRAMES_IN_FLIGHT = 2;
@@ -71,6 +72,7 @@ private:
   std::vector<VkDescriptorSet> mDescriptorSets;
   std::vector<VulkanBuffer> mUniformBuffers;
   std::vector<void *> mUniformBuffersMapped;
+  VulkanTexture mTexture;
 
   void CreateSwapchain();
   void CreateImageViews();

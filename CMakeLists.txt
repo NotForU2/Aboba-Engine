@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.10.0)
+cmake_minimum_required(VERSION 3.21.0)
 project(Aboba-Engine)
 
 set(CMAKE_CXX_STANDARD 23)
@@ -20,6 +20,7 @@ add_executable(Aboba-Engine
   src/graphics/VulkanRenderer.cpp
   src/graphics/VulkanBuffer.cpp
   src/graphics/VulkanContext.cpp
+  src/graphics/VulkanTexture.cpp
 )
 
 target_link_libraries(Aboba-Engine PRIVATE
@@ -29,4 +30,18 @@ target_link_libraries(Aboba-Engine PRIVATE
   glm::glm
   Vulkan::Vulkan
   GPUOpen::VulkanMemoryAllocator
+)
+
+target_include_directories(Aboba-Engine PRIVATE ${CMAKE_SOURCE_DIR}/src/vendor)
+
+add_custom_command(TARGET Aboba-Engine POST_BUILD
+  COMMAND ${CMAKE_COMMAND} -E copy_directory
+          ${CMAKE_SOURCE_DIR}/textures
+          $<TARGET_FILE_DIR:Aboba-Engine>/textures
+)
+
+add_custom_command(TARGET Aboba-Engine POST_BUILD
+  COMMAND ${CMAKE_COMMAND} -E copy_directory
+          ${CMAKE_SOURCE_DIR}/shaders
+          $<TARGET_FILE_DIR:Aboba-Engine>/shaders
 )
