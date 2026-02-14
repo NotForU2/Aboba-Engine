@@ -3,7 +3,6 @@
 void VulkanRenderer::Init(SDL_Window *window, const char *appName, const char *engineName)
 {
   mContext.Init(window, appName, engineName);
-  mTexture.Create(mContext, "textures/aaa.png");
 
   CreateSwapchain();
   CreateImageViews();
@@ -15,6 +14,8 @@ void VulkanRenderer::Init(SDL_Window *window, const char *appName, const char *e
 
   CreateBuffers();
   CreateUniformBuffers();
+
+  mTexture.Create(mContext, "textures/aaa.png");
 
   CreateDescriptorPool();
   CreateDescriptorSets();
@@ -278,29 +279,8 @@ void VulkanRenderer::CreateGraphicsPipeline()
   };
 
   // Vertex Input
-  VkVertexInputAttributeDescription attributeDescriptionPosition{
-      .location = 0,
-      .binding = 0,
-      .format = VK_FORMAT_R32G32_SFLOAT,
-      .offset = offsetof(Vertex, pos),
-  };
-  VkVertexInputAttributeDescription attributeDescriptionColor{
-      .location = 1,
-      .binding = 0,
-      .format = VK_FORMAT_R32G32B32_SFLOAT,
-      .offset = offsetof(Vertex, color),
-  };
-
-  std::vector<VkVertexInputAttributeDescription> attributeDescriptions = {
-      attributeDescriptionPosition,
-      attributeDescriptionColor,
-  };
-
-  VkVertexInputBindingDescription bindingDescription{
-      .binding = 0,
-      .stride = sizeof(Vertex),
-      .inputRate = VK_VERTEX_INPUT_RATE_VERTEX,
-  };
+  auto bindingDescription = Vertex::getBindingDescription();
+  auto attributeDescriptions = Vertex::getAttributeDescriptions();
 
   VkPipelineVertexInputStateCreateInfo vertexInputInfo{
       .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
@@ -468,8 +448,6 @@ void VulkanRenderer::CreateCommandBuffers()
   {
     throw std::runtime_error("Failed to allocate command buffers");
   }
-
-  std::cout << "Vulkan Command Buffers created successfully" << std::endl;
 }
 
 void VulkanRenderer::CreateSyncObjects()
@@ -502,8 +480,6 @@ void VulkanRenderer::CreateSyncObjects()
       throw std::runtime_error("Failed to create sync objects for a frame");
     }
   }
-
-  std::cout << "Vulkan Sync Objects created successfully" << std::endl;
 }
 
 void VulkanRenderer::CreatePipelineBarrierEntry(VkCommandBuffer commandBuffer, uint32_t imageIndex)
@@ -755,19 +731,23 @@ void VulkanRenderer::CreateBuffers()
   std::vector<Vertex> vertices = {
       {
           {-0.5f, -0.5f},
-          {1.0f, 0.0f, 0.0f},
+          {1.0f, 1.0f, 1.0f},
+          {0.0f, 0.0f},
       },
       {
           {0.5f, -0.5f},
-          {0.0f, 1.0f, 0.0f},
+          {1.0f, 1.0f, 1.0f},
+          {1.0f, 0.0f},
       },
       {
           {0.5f, 0.5f},
-          {0.0f, 0.0f, 1.0f},
+          {1.0f, 1.0f, 1.0f},
+          {1.0f, 1.0f},
       },
       {
           {-0.5f, 0.5f},
           {1.0f, 1.0f, 1.0f},
+          {0.0f, 1.0f},
       },
   };
 
@@ -818,25 +798,33 @@ void VulkanRenderer::CreateBuffers()
 
 void VulkanRenderer::CreateDescriptorSetLayout()
 {
-  VkDescriptorSetLayoutBinding uboLayotBinding{
+  VkDescriptorSetLayoutBinding uboLayoutBinding{
       .binding = 0,
       .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
       .descriptorCount = 1,
       .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
+  };
+
+  VkDescriptorSetLayoutBinding samplerLayoutBinding{
+      .binding = 1,
+      .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+      .descriptorCount = 1,
+      .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
       .pImmutableSamplers = nullptr,
   };
+
+  std::array<VkDescriptorSetLayoutBinding, 2> bindings = {uboLayoutBinding, samplerLayoutBinding};
+
   VkDescriptorSetLayoutCreateInfo layoutInfo{
       .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-      .bindingCount = 1,
-      .pBindings = &uboLayotBinding,
+      .bindingCount = static_cast<uint32_t>(bindings.size()),
+      .pBindings = bindings.data(),
   };
 
   if (vkCreateDescriptorSetLayout(mContext.GetDevice(), &layoutInfo, nullptr, &mDescriptorSetLayout) != VK_SUCCESS)
   {
     throw std::runtime_error("Failed to create descriptor set layout");
   }
-
-  std::cout << "Vulkan Descriptor Set Layout created successfully" << std::endl;
 }
 
 void VulkanRenderer::CreateUniformBuffers()
@@ -859,29 +847,33 @@ void VulkanRenderer::CreateUniformBuffers()
 
     mUniformBuffersMapped[i] = mUniformBuffers[i].Map(mContext.GetAllocator());
   }
-
-  std::cout << "Vulkan Uniform Buffers created successfully" << std::endl;
 }
 
 void VulkanRenderer::CreateDescriptorPool()
 {
-  VkDescriptorPoolSize poolSize{
+  VkDescriptorPoolSize matrixPoolSize{
       .type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
       .descriptorCount = MAX_FRAMES_IN_FLIGHT,
   };
+
+  VkDescriptorPoolSize texPoolSize{
+      .type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+      .descriptorCount = MAX_FRAMES_IN_FLIGHT,
+  };
+
+  std::array<VkDescriptorPoolSize, 2> poolSizes{matrixPoolSize, texPoolSize};
+
   VkDescriptorPoolCreateInfo poolInfo{
       .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
       .maxSets = MAX_FRAMES_IN_FLIGHT,
-      .poolSizeCount = 1,
-      .pPoolSizes = &poolSize,
+      .poolSizeCount = static_cast<uint32_t>(poolSizes.size()),
+      .pPoolSizes = poolSizes.data(),
   };
 
   if (vkCreateDescriptorPool(mContext.GetDevice(), &poolInfo, nullptr, &mDescriptorPool) != VK_SUCCESS)
   {
     throw std::runtime_error("Failed to create descriptor pool");
   }
-
-  std::cout << "Vulkan Descriptor Pool created successfully" << std::endl;
 }
 
 void VulkanRenderer::CreateDescriptorSets()
@@ -908,7 +900,7 @@ void VulkanRenderer::CreateDescriptorSets()
         .offset = 0,
         .range = sizeof(UniformBufferObject),
     };
-    VkWriteDescriptorSet descriptorWrite{
+    VkWriteDescriptorSet bufferDescriptorWrite{
         .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
         .dstSet = mDescriptorSets[i],
         .dstBinding = 0,
@@ -918,10 +910,25 @@ void VulkanRenderer::CreateDescriptorSets()
         .pBufferInfo = &bufferInfo,
     };
 
-    vkUpdateDescriptorSets(mContext.GetDevice(), 1, &descriptorWrite, 0, nullptr);
-  }
+    VkDescriptorImageInfo imageInfo{
+        .sampler = mTexture.GetSampler(),
+        .imageView = mTexture.GetImageView(),
+        .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+    };
+    VkWriteDescriptorSet imageDescriptorWrite{
+        .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+        .dstSet = mDescriptorSets[i],
+        .dstBinding = 1,
+        .dstArrayElement = 0,
+        .descriptorCount = 1,
+        .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+        .pImageInfo = &imageInfo,
+    };
 
-  std::cout << "Vulkan Descriptor Sets created successfully" << std::endl;
+    std::array<VkWriteDescriptorSet, 2> descriptorWrites{bufferDescriptorWrite, imageDescriptorWrite};
+
+    vkUpdateDescriptorSets(mContext.GetDevice(), static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
+  }
 }
 
 void VulkanRenderer::UpdateUniformBuffer(uint32_t currentImage)

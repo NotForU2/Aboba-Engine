@@ -5,6 +5,7 @@
 #include <vk_mem_alloc.h>
 #include <glm/glm.hpp>
 #include <vector>
+#include <array>
 #include <stdexcept>
 #include <iostream>
 #include <cstring>
@@ -18,6 +19,7 @@
 #include "VulkanContext.hpp"
 #include "VulkanTexture.hpp"
 #include "Camera.hpp"
+#include "Vertex.hpp"
 
 const uint32_t MAX_FRAMES_IN_FLIGHT = 2;
 
@@ -33,12 +35,6 @@ struct SwapchainSupportDetails
   VkSurfaceCapabilities2KHR capabilities;
   std::vector<VkSurfaceFormat2KHR> formats;
   std::vector<VkPresentModeKHR> presentModes;
-};
-
-struct Vertex
-{
-  glm::vec2 pos;
-  glm::vec3 color;
 };
 
 class VulkanRenderer
