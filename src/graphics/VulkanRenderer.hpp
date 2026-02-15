@@ -15,6 +15,7 @@
 #include <algorithm>
 #include <fstream>
 #include <chrono>
+#include <unordered_map>
 #include "VulkanBuffer.hpp"
 #include "VulkanContext.hpp"
 #include "VulkanTexture.hpp"
@@ -69,6 +70,12 @@ private:
   std::vector<VulkanBuffer> mUniformBuffers;
   std::vector<void *> mUniformBuffersMapped;
   VulkanTexture mTexture;
+  std::vector<Vertex> mVertices;
+  std::vector<uint32_t> mIndices;
+  VkImage mDepthImage;
+  VmaAllocation mDepthAllocation;
+  VkImageView mDepthImageView;
+  VkFormat mDepthFormat = VK_FORMAT_D32_SFLOAT;
 
   void CreateSwapchain();
   void CreateImageViews();
@@ -90,4 +97,6 @@ private:
   void CreateDescriptorPool();
   void CreateDescriptorSets();
   void UpdateUniformBuffer(uint32_t currentImage);
+  void LoadModel();
+  void CreateDepthResources();
 };

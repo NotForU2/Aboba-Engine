@@ -1,4 +1,6 @@
 #include "VulkanRenderer.hpp"
+#define TINYOBJLOADER_IMPLEMENTATION
+#include "tiny_obj_loader.h"
 
 void VulkanRenderer::Init(SDL_Window *window, const char *appName, const char *engineName)
 {
@@ -8,14 +10,17 @@ void VulkanRenderer::Init(SDL_Window *window, const char *appName, const char *e
   CreateImageViews();
   mCamera.SetProjection(45.0f, mSwapchainExtent.width / mSwapchainExtent.height, 0.1f, 10.0f);
 
+  CreateDepthResources();
+
   CreateDescriptorSetLayout();
 
   CreateGraphicsPipeline();
 
+  LoadModel();
   CreateBuffers();
   CreateUniformBuffers();
 
-  mTexture.Create(mContext, "textures/aaa.png");
+  mTexture.Create(mContext, "textures/Image_1.jpg");
 
   CreateDescriptorPool();
   CreateDescriptorSets();
@@ -52,6 +57,9 @@ void VulkanRenderer::Cleanup()
   vkDestroyPipelineLayout(mContext.GetDevice(), mPipelineLayout, nullptr);
 
   vkDestroyDescriptorSetLayout(mContext.GetDevice(), mDescriptorSetLayout, nullptr);
+
+  vkDestroyImageView(mContext.GetDevice(), mDepthImageView, nullptr);
+  vmaDestroyImage(mContext.GetAllocator(), mDepthImage, mDepthAllocation);
 
   for (auto imageView : mSwapchainImageViews)
   {
@@ -335,6 +343,16 @@ void VulkanRenderer::CreateGraphicsPipeline()
       .pAttachments = &colorBlendAttachment,
   };
 
+  // Depth
+  VkPipelineDepthStencilStateCreateInfo depthStencil{
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
+      .depthTestEnable = VK_TRUE,
+      .depthWriteEnable = VK_TRUE,
+      .depthCompareOp = VK_COMPARE_OP_LESS,
+      .depthBoundsTestEnable = VK_FALSE,
+      .stencilTestEnable = VK_FALSE,
+  };
+
   // Dynamic States
   std::vector<VkDynamicState> dynamicStates = {
       VK_DYNAMIC_STATE_VIEWPORT,
@@ -363,6 +381,7 @@ void VulkanRenderer::CreateGraphicsPipeline()
       .sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO,
       .colorAttachmentCount = 1,
       .pColorAttachmentFormats = &mSwapchainImageFormat,
+      .depthAttachmentFormat = mDepthFormat,
   };
 
   // Main create info
@@ -376,6 +395,7 @@ void VulkanRenderer::CreateGraphicsPipeline()
       .pViewportState = &viewportState,
       .pRasterizationState = &rasterizer,
       .pMultisampleState = &multisampling,
+      .pDepthStencilState = &depthStencil,
       .pColorBlendState = &colorBlending,
       .pDynamicState = &pipelineDynamicState,
       .layout = mPipelineLayout,
@@ -574,6 +594,18 @@ void VulkanRenderer::RecordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t
               0.1f,
           }}},
   };
+
+  VkRenderingAttachmentInfo depthAttachment{
+      .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
+      .imageView = mDepthImageView,
+      .imageLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
+      .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+      .storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+      .clearValue = {
+          .depthStencil = {1.0f, 0},
+      },
+  };
+
   VkRenderingInfo renderingInfo{
       .sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
       .renderArea = {
@@ -586,6 +618,7 @@ void VulkanRenderer::RecordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t
       .layerCount = 1,
       .colorAttachmentCount = 1,
       .pColorAttachments = &colorAttachment,
+      .pDepthAttachment = &depthAttachment,
   };
 
   // Render start
@@ -728,34 +761,10 @@ void VulkanRenderer::DrawFrame()
 
 void VulkanRenderer::CreateBuffers()
 {
-  std::vector<Vertex> vertices = {
-      {
-          {-0.5f, -0.5f},
-          {1.0f, 1.0f, 1.0f},
-          {0.0f, 0.0f},
-      },
-      {
-          {0.5f, -0.5f},
-          {1.0f, 1.0f, 1.0f},
-          {1.0f, 0.0f},
-      },
-      {
-          {0.5f, 0.5f},
-          {1.0f, 1.0f, 1.0f},
-          {1.0f, 1.0f},
-      },
-      {
-          {-0.5f, 0.5f},
-          {1.0f, 1.0f, 1.0f},
-          {0.0f, 1.0f},
-      },
-  };
+  mIndicesCount = static_cast<uint32_t>(mIndices.size());
 
-  std::vector<uint32_t> indices = {0, 1, 2, 2, 3, 0};
-  mIndicesCount = static_cast<uint32_t>(indices.size());
-
-  VkDeviceSize vertexBufferSize = sizeof(Vertex) * vertices.size();
-  VkDeviceSize indexBufferSize = sizeof(uint32_t) * indices.size();
+  VkDeviceSize vertexBufferSize = sizeof(Vertex) * mVertices.size();
+  VkDeviceSize indexBufferSize = sizeof(uint32_t) * mIndices.size();
 
   // Vertex
   VulkanBuffer stagingBufferVertex;
@@ -764,7 +773,7 @@ void VulkanRenderer::CreateBuffers()
                              VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
                              VMA_MEMORY_USAGE_AUTO,
                              VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT);
-  stagingBufferVertex.Upload(mContext.GetAllocator(), vertices.data(), vertexBufferSize);
+  stagingBufferVertex.Upload(mContext.GetAllocator(), mVertices.data(), vertexBufferSize);
 
   mVertexBuffer.Create(mContext.GetAllocator(),
                        vertexBufferSize,
@@ -783,7 +792,7 @@ void VulkanRenderer::CreateBuffers()
                             VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
                             VMA_MEMORY_USAGE_AUTO,
                             VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT);
-  stagingBufferIndex.Upload(mContext.GetAllocator(), indices.data(), indexBufferSize);
+  stagingBufferIndex.Upload(mContext.GetAllocator(), mIndices.data(), indexBufferSize);
 
   mIndexBuffer.Create(mContext.GetAllocator(),
                       indexBufferSize,
@@ -938,10 +947,137 @@ void VulkanRenderer::UpdateUniformBuffer(uint32_t currentImage)
   float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
 
   UniformBufferObject ubo{
-      .model = glm::rotate(glm::mat4(1.0f), time * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f)),
+      .model = glm::rotate(glm::mat4(1.0f), time * glm::radians(90.0f), glm::vec3(1.0f, 0.0f, 0.0f)),
       .view = mCamera.GetView(),
       .proj = mCamera.GetProjection(),
   };
 
   memcpy(mUniformBuffersMapped[currentImage], &ubo, sizeof(ubo));
+}
+
+void VulkanRenderer::LoadModel()
+{
+  tinyobj::attrib_t attrib;
+  std::vector<tinyobj::shape_t> shapes;
+  std::vector<tinyobj::material_t> materials;
+  std::string warn, err;
+
+  std::string modelPath = "models/Panda.obj";
+
+  if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, modelPath.c_str()))
+  {
+    throw std::runtime_error(warn + err);
+  }
+
+  std::unordered_map<Vertex, uint32_t> uniqueVertices{};
+
+  for (const auto &shape : shapes)
+  {
+    for (const auto &index : shape.mesh.indices)
+    {
+      Vertex vertex{};
+
+      vertex.pos = {
+          attrib.vertices[3 * index.vertex_index + 0],
+          attrib.vertices[3 * index.vertex_index + 1],
+          attrib.vertices[3 * index.vertex_index + 2],
+      };
+
+      if (index.texcoord_index >= 0)
+      {
+        vertex.texCoord = {
+            attrib.texcoords[2 * index.texcoord_index + 0],
+            1.0f - attrib.texcoords[2 * index.texcoord_index + 1],
+        };
+      }
+
+      vertex.color = {1.0f, 1.0f, 1.0f};
+
+      if (uniqueVertices.count(vertex) == 0)
+      {
+        uniqueVertices[vertex] = static_cast<uint32_t>(mVertices.size());
+        mVertices.push_back(vertex);
+      }
+      mIndices.push_back(uniqueVertices[vertex]);
+    }
+  }
+}
+
+void VulkanRenderer::CreateDepthResources()
+{
+  VkImageCreateInfo imageInfo{
+      .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+      .imageType = VK_IMAGE_TYPE_2D,
+      .format = mDepthFormat,
+      .extent = {
+          .width = mSwapchainExtent.width,
+          .height = mSwapchainExtent.height,
+          .depth = 1,
+      },
+      .mipLevels = 1,
+      .arrayLayers = 1,
+      .samples = VK_SAMPLE_COUNT_1_BIT,
+      .tiling = VK_IMAGE_TILING_OPTIMAL,
+      .usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+      .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+      .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+  };
+
+  VmaAllocationCreateInfo allocInfo{
+      .usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE,
+  };
+
+  if (vmaCreateImage(mContext.GetAllocator(), &imageInfo, &allocInfo, &mDepthImage, &mDepthAllocation, nullptr) != VK_SUCCESS)
+  {
+    throw std::runtime_error("Failed to create depth image");
+  }
+
+  VkImageViewCreateInfo viewInfo{
+      .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+      .image = mDepthImage,
+      .viewType = VK_IMAGE_VIEW_TYPE_2D,
+      .format = VK_FORMAT_D32_SFLOAT,
+      .subresourceRange = {
+          .aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT,
+          .baseMipLevel = 0,
+          .levelCount = 1,
+          .baseArrayLayer = 0,
+          .layerCount = 1,
+      },
+  };
+
+  if (vkCreateImageView(mContext.GetDevice(), &viewInfo, nullptr, &mDepthImageView) != VK_SUCCESS)
+  {
+    throw std::runtime_error("Failed to create depth image view");
+  }
+
+  VkCommandBuffer commandBuffer = mContext.BeginSingleTimeCommands();
+
+  VkImageMemoryBarrier2 barrier{
+      .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+      .srcStageMask = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT,
+      .srcAccessMask = 0,
+      .dstStageMask = VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT,
+      .dstAccessMask = VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+      .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+      .newLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
+      .image = mDepthImage,
+      .subresourceRange = {
+          .aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT,
+          .baseMipLevel = 0,
+          .levelCount = 1,
+          .baseArrayLayer = 0,
+          .layerCount = 1,
+      },
+  };
+
+  VkDependencyInfo dependencyInfo{
+      .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+      .imageMemoryBarrierCount = 1,
+      .pImageMemoryBarriers = &barrier,
+  };
+
+  vkCmdPipelineBarrier2(commandBuffer, &dependencyInfo);
+
+  mContext.EndSingleTimeCommands(commandBuffer);
 }

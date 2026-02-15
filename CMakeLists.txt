@@ -45,3 +45,9 @@ add_custom_command(TARGET Aboba-Engine POST_BUILD
           ${CMAKE_SOURCE_DIR}/shaders
           $<TARGET_FILE_DIR:Aboba-Engine>/shaders
 )
+
+add_custom_command(TARGET Aboba-Engine POST_BUILD
+  COMMAND ${CMAKE_COMMAND} -E copy_directory
+          ${CMAKE_SOURCE_DIR}/models
+          $<TARGET_FILE_DIR:Aboba-Engine>/models
+)
