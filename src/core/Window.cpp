@@ -1,6 +1,5 @@
 #include "Window.hpp"
 #include "Logger.hpp"
-#include <SDL_vulkan.h>
 
 Window::Window() {}
 
@@ -9,25 +8,19 @@ Window::~Window()
   Cleanup();
 }
 
-SDL_Window *Window::GetWindow()
+GLFWwindow *Window::GetWindow()
 {
   return mWindow;
 }
 
 void Window::Init(const char *title, int width, int height)
 {
-  if (SDL_Init(SDL_INIT_VIDEO) != 0)
-  {
-    throw std::runtime_error("SDL_Init failed");
-  }
+  glfwInit();
 
-  mWindow = SDL_CreateWindow(
-      title,
-      SDL_WINDOWPOS_CENTERED,
-      SDL_WINDOWPOS_CENTERED,
-      width,
-      height,
-      SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE);
+  glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+  glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
+
+  mWindow = glfwCreateWindow(width, height, title, nullptr, nullptr);
 
   if (!mWindow)
   {
@@ -40,12 +33,11 @@ void Window::Init(const char *title, int width, int height)
 
 bool Window::CanRender()
 {
-  Uint32 notPresent = SDL_GetWindowFlags(mWindow) & SDL_WINDOW_MINIMIZED;
-  return !notPresent;
+  return true;
 }
 
 void Window::Cleanup()
 {
-  SDL_DestroyWindow(mWindow);
-  SDL_Quit();
+  glfwDestroyWindow(mWindow);
+  glfwTerminate();
 }

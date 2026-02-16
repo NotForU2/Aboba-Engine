@@ -1,6 +1,4 @@
-#include <SDL2/SDL.h>
 #include "core/Engine.hpp"
-#include <iostream>
 
 int main(int, char **)
 {

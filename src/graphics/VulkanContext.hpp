@@ -1,9 +1,10 @@
 #pragma once
-#include <SDL2/SDL.h>
-#include <SDL2/SDL_vulkan.h>
+#define GLFW_INCLUDE_VULKAN
+#include <GLFW/glfw3.h>
 #include <vulkan/vulkan.h>
 #include <vk_mem_alloc.h>
 #include <vector>
+#include <array>
 #include <optional>
 #include <cstring>
 #include <stdexcept>
@@ -21,24 +22,24 @@ struct QueueFamilyIndices
     return graphicsFamily.has_value() && presentFamily.has_value();
   }
 
-  std::set<uint32_t> GetUniqueQueueFamisies()
+  std::set<uint32_t> GetUniqueQueueFamilies()
   {
-    std::set<uint32_t> uniqueQueueFamisies = {
+    std::set<uint32_t> uniqueQueueFamilies = {
         graphicsFamily.value(),
         presentFamily.value(),
     };
 
-    return uniqueQueueFamisies;
+    return uniqueQueueFamilies;
   }
 };
 
 class VulkanContext
 {
 public:
-  void Init(SDL_Window *window, const char *appName, const char *engineName);
+  void Init(GLFWwindow *window, const char *appName, const char *engineName);
   void Cleanup();
 
-  SDL_Window *GetWindow() const { return mWindow; }
+  GLFWwindow *GetWindow() const { return mWindow; }
   VkInstance GetInstance() const { return mInstance; }
   VkDevice GetDevice() const { return mDevice; }
   VkPhysicalDevice GetPhysicalDevice() const { return mPhysicalDevice; }
@@ -55,7 +56,7 @@ public:
   void CopyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size);
 
 private:
-  SDL_Window *mWindow;
+  GLFWwindow *mWindow;
   VkInstance mInstance;
   VkPhysicalDevice mPhysicalDevice = VK_NULL_HANDLE;
   VkDevice mDevice;
@@ -66,8 +67,8 @@ private:
   VkCommandPool mCommandPool;
   QueueFamilyIndices mQueueFamilyIndices;
 
-  const std::vector<const char *> validationLayers = {"VK_LAYER_KHRONOS_validation"};
-  const std::vector<const char *> deviceExtensions = {
+  const std::array<const char *, 1> validationLayers = {"VK_LAYER_KHRONOS_validation"};
+  const std::array<const char *, 2> deviceExtensions = {
       VK_KHR_SWAPCHAIN_EXTENSION_NAME,
       VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME,
   };
@@ -79,6 +80,7 @@ private:
 #endif
 
   bool CheckValidationLayerSupport();
+  std::vector<const char *> GetSdlExtensions();
   void CreateInstance(const char *appName, const char *engineName);
   void PickPhysicalDevice();
   uint32_t RateDeviceSuitability(VkPhysicalDevice device);

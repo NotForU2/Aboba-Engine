@@ -1,6 +1,5 @@
 #pragma once
 #include <entt/entt.hpp>
-#include <SDL2/SDL.h>
 #include "Window.hpp"
 #include "Timer.hpp"
 #include "../ecs/Components.hpp"

@@ -1,23 +1,23 @@
 #pragma once
-#include <SDL2/SDL.h>
+#include <GLFW/glfw3.h>
 
 class Timer
 {
 public:
   Timer()
   {
-    mFrequency = static_cast<double>(SDL_GetPerformanceFrequency());
+    mFrequency = glfwGetTimerFrequency();
     Reset();
   }
 
   void Reset()
   {
-    mLastTime = SDL_GetPerformanceCounter();
+    mLastTime = glfwGetTimerValue();
   }
 
   float Tick()
   {
-    uint64_t currentTime = SDL_GetPerformanceCounter();
+    uint64_t currentTime = glfwGetTimerValue();
     uint64_t deltaTicks = currentTime - mLastTime;
     float dt = static_cast<float>(deltaTicks / mFrequency);
 
@@ -32,6 +32,6 @@ public:
   }
 
 private:
-  double mFrequency;
+  uint64_t mFrequency;
   uint64_t mLastTime;
 };

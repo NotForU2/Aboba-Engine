@@ -1,5 +1,5 @@
 #pragma once
-#include <SDL2/SDL.h>
+#include <GLFW/glfw3.h>
 #include <stdexcept>
 
 class Window
@@ -11,11 +11,11 @@ public:
   void Init(const char *title, int width, int height);
   void Cleanup();
   bool CanRender();
-  SDL_Window *GetWindow();
+  GLFWwindow *GetWindow();
 
 private:
   int mWidth;
   int mHeight;
 
-  SDL_Window *mWindow;
+  GLFWwindow *mWindow = nullptr;
 };

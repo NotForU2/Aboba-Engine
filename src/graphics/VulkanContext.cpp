@@ -1,7 +1,7 @@
 #define VMA_IMPLEMENTATION
 #include "VulkanContext.hpp"
 
-void VulkanContext::Init(SDL_Window *window, const char *appName, const char *engineName)
+void VulkanContext::Init(GLFWwindow *window, const char *appName, const char *engineName)
 {
   mWindow = window;
 
@@ -10,14 +10,12 @@ void VulkanContext::Init(SDL_Window *window, const char *appName, const char *en
   PickPhysicalDevice();
   CreateLogicalDevice();
   CreateAllocator();
-
   CreateCommandPool();
 }
 
 void VulkanContext::Cleanup()
 {
   vkDestroyCommandPool(mDevice, mCommandPool, nullptr);
-
   vmaDestroyAllocator(mAllocator);
   vkDestroyDevice(mDevice, nullptr);
   vkDestroySurfaceKHR(mInstance, mSurface, nullptr);
@@ -52,6 +50,19 @@ bool VulkanContext::CheckValidationLayerSupport()
   }
 
   return true;
+}
+
+std::vector<const char *> VulkanContext::GetSdlExtensions()
+{
+  uint32_t glfwExtensionCount = 0;
+  auto glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
+
+  std::vector<const char *> extensions(glfwExtensions, glfwExtensions + glfwExtensionCount);
+
+  // 2KHR
+  extensions.push_back(VK_KHR_GET_SURFACE_CAPABILITIES_2_EXTENSION_NAME);
+
+  return extensions;
 }
 
 void VulkanContext::CreateInstance(const char *appName, const char *engineName)
@@ -91,20 +102,7 @@ void VulkanContext::CreateInstance(const char *appName, const char *engineName)
 
   std::cout << "Initializing Vulkan Instance with API Version: 1." << VK_API_VERSION_MINOR(targetVersion) << std::endl;
 
-  uint32_t sdlExtensionCount = 0;
-  if (!SDL_Vulkan_GetInstanceExtensions(mWindow, &sdlExtensionCount, nullptr))
-  {
-    throw std::runtime_error("Failed to get SDL Vulkan extensions count");
-  }
-
-  std::vector<const char *> extensions(sdlExtensionCount);
-  if (!SDL_Vulkan_GetInstanceExtensions(mWindow, &sdlExtensionCount, extensions.data()))
-  {
-    throw std::runtime_error("Failed to get SDL Vulkan extensions");
-  }
-
-  // 2KHR
-  extensions.push_back(VK_KHR_GET_SURFACE_CAPABILITIES_2_EXTENSION_NAME);
+  auto extensions = GetSdlExtensions();
 
   // В Vulkan 1.3+ для переносимости (особенно на macOS через MoltenVK) может понадобиться флаг (flag)
   // VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR, но на Windows пока опустим.
@@ -207,6 +205,7 @@ uint32_t VulkanContext::RateDeviceSuitability(VkPhysicalDevice device)
       .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
       .pNext = &features14,
   };
+
   vkGetPhysicalDeviceFeatures2(device, &features2);
 
   if (!features13.dynamicRendering)
@@ -271,7 +270,7 @@ QueueFamilyIndices VulkanContext::FindQueueFamilies(VkPhysicalDevice device)
 void VulkanContext::CreateLogicalDevice()
 {
   std::vector<VkDeviceQueueCreateInfo> queueCreateInfos;
-  std::set<uint32_t> uniqueQueueFamisies = mQueueFamilyIndices.GetUniqueQueueFamisies();
+  std::set<uint32_t> uniqueQueueFamisies = mQueueFamilyIndices.GetUniqueQueueFamilies();
 
   for (uint32_t queieFamily : uniqueQueueFamisies)
   {
@@ -289,6 +288,7 @@ void VulkanContext::CreateLogicalDevice()
   VkPhysicalDeviceVulkan12Features features12{
       .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
       .bufferDeviceAddress = VK_TRUE,
+
   };
   // Vulkan 1.3
   VkPhysicalDeviceVulkan13Features features13{
@@ -353,7 +353,7 @@ void VulkanContext::CreateLogicalDevice()
 
 void VulkanContext::CreateSurface()
 {
-  if (!SDL_Vulkan_CreateSurface(mWindow, mInstance, &mSurface))
+  if (glfwCreateWindowSurface(mInstance, mWindow, nullptr, &mSurface) != VK_SUCCESS)
   {
     throw std::runtime_error("Failed to create window surface");
   }

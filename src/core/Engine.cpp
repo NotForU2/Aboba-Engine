@@ -61,7 +61,7 @@ void Engine::Run()
 
 void Engine::ProccessInput()
 {
-  mInputSystem.HandleEvents(mRegistry, mIsRunning);
+  mInputSystem.HandleEvents(mWindow.GetWindow(), mRegistry, mIsRunning);
 }
 
 void Engine::Update(float dt)

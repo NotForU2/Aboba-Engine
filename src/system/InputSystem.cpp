@@ -1,8 +1,8 @@
 #include "InputSystem.hpp"
 
-SDL_Rect InputSystem::GetNormalizeRect(SDL_Point p1, SDL_Point p2) const
+Rect InputSystem::GetNormalizeRect(Point p1, Point p2) const
 {
-  SDL_Rect r;
+  Rect r;
 
   r.x = std::min(p1.x, p2.x);
   r.y = std::min(p1.y, p2.y);
@@ -15,37 +15,37 @@ SDL_Rect InputSystem::GetNormalizeRect(SDL_Point p1, SDL_Point p2) const
 void InputSystem::ApplySelection(entt::registry &registry)
 {
 
-  SDL_Rect selRect = GetNormalizeRect(mStartPos, mCurrentPos);
+  Rect selRect = GetNormalizeRect(mStartPos, mCurrentPos);
 
   bool isClick = (selRect.w < 5 && selRect.h < 5);
 
   auto view = registry.view<Position, RenderData>();
 
-  view.each([&](auto entity, const auto &pos, const auto &data)
-            { SDL_Rect unitRect = {(int)pos.x,
-                                   (int)pos.y,
-                                   data.size,
-                                   data.size };
-              
-              if (isClick)
-              {
-                SDL_Point clickPoint = {mStartPos.x, mStartPos.y};
-                if (SDL_PointInRect(&clickPoint, &unitRect))
-                {
-                  registry.emplace<Selected>(entity);
-                  return;
-                }
-              }
-              else
-              {
-                if (SDL_HasIntersection(&selRect, &unitRect))
-                {
-                  registry.emplace<Selected>(entity);
-                }
-              } });
+  // view.each([&](auto entity, const auto &pos, const auto &data)
+  //           { Rect unitRect = { (int)pos.x,
+  //                               (int)pos.y,
+  //                               data.size,
+  //                               data.size };
+
+  //             if (isClick)
+  //             {
+  //               Point clickPoint = {mStartPos.x, mStartPos.y};
+  //               if (SDL_PointInRect(&clickPoint, &unitRect))
+  //               {
+  //                 registry.emplace<Selected>(entity);
+  //                 return;
+  //               }
+  //             }
+  //             else
+  //             {
+  //               if (SDL_HasIntersection(&selRect, &unitRect))
+  //               {
+  //                 registry.emplace<Selected>(entity);
+  //               }
+  //             } });
 };
 
-SDL_Rect InputSystem::GetSelectionRect() const
+Rect InputSystem::GetSelectionRect() const
 {
   if (!mIsSelecting)
   {
@@ -55,46 +55,52 @@ SDL_Rect InputSystem::GetSelectionRect() const
   return GetNormalizeRect(mStartPos, mCurrentPos);
 };
 
-void InputSystem::HandleEvents(entt::registry &registry, bool &isRunning)
+void InputSystem::HandleEvents(GLFWwindow *window, entt::registry &registry, bool &isRunning)
 {
-  SDL_Event event;
+  glfwPollEvents();
 
-  while (SDL_PollEvent(&event))
+  if (glfwWindowShouldClose(window))
   {
-    if (event.type == SDL_QUIT)
-    {
-      isRunning = false;
-    }
-
-    if (event.type == SDL_MOUSEBUTTONDOWN && event.button.button == SDL_BUTTON_LEFT)
-    {
-      mIsSelecting = true;
-      SDL_GetMouseState(&mStartPos.x, &mStartPos.y);
-      mCurrentPos = mStartPos;
-
-      registry.clear<Selected>();
-    }
-
-    if (event.type == SDL_MOUSEMOTION && mIsSelecting)
-    {
-      SDL_GetMouseState(&mCurrentPos.x, &mCurrentPos.y);
-    }
-
-    if (event.type == SDL_MOUSEBUTTONUP && event.button.button == SDL_BUTTON_LEFT)
-    {
-      mIsSelecting = false;
-      SDL_GetMouseState(&mCurrentPos.x, &mCurrentPos.y);
-      ApplySelection(registry);
-    }
-
-    if (event.type == SDL_MOUSEBUTTONDOWN && event.button.button == SDL_BUTTON_RIGHT)
-    {
-      int mx, my;
-      SDL_GetMouseState(&mx, &my);
-
-      auto view = registry.view<Position, Selected>();
-      view.each([&](auto entity, const auto &pos)
-                { registry.emplace_or_replace<Destination>(entity, (float)mx, (float)my); });
-    }
+    isRunning = false;
   }
+  // SDL_Event event;
+
+  // while (SDL_PollEvent(&event))
+  // {
+  //   if (event.type == SDL_QUIT)
+  //   {
+  //     isRunning = false;
+  //   }
+
+  //   if (event.type == SDL_MOUSEBUTTONDOWN && event.button.button == SDL_BUTTON_LEFT)
+  //   {
+  //     mIsSelecting = true;
+  //     SDL_GetMouseState(&mStartPos.x, &mStartPos.y);
+  //     mCurrentPos = mStartPos;
+
+  //     registry.clear<Selected>();
+  //   }
+
+  //   if (event.type == SDL_MOUSEMOTION && mIsSelecting)
+  //   {
+  //     SDL_GetMouseState(&mCurrentPos.x, &mCurrentPos.y);
+  //   }
+
+  //   if (event.type == SDL_MOUSEBUTTONUP && event.button.button == SDL_BUTTON_LEFT)
+  //   {
+  //     mIsSelecting = false;
+  //     SDL_GetMouseState(&mCurrentPos.x, &mCurrentPos.y);
+  //     ApplySelection(registry);
+  //   }
+
+  //   if (event.type == SDL_MOUSEBUTTONDOWN && event.button.button == SDL_BUTTON_RIGHT)
+  //   {
+  //     int mx, my;
+  //     SDL_GetMouseState(&mx, &my);
+
+  //     auto view = registry.view<Position, Selected>();
+  //     view.each([&](auto entity, const auto &pos)
+  //               { registry.emplace_or_replace<Destination>(entity, (float)mx, (float)my); });
+  //   }
+  // }
 }

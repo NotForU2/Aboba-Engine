@@ -2,13 +2,8 @@
   "dependencies": [
     "entt",
     "glm",
-    {
-      "name": "sdl2",
-      "features": [
-        "vulkan"
-      ]
-    },
     "vulkan",
-    "vulkan-memory-allocator"
+    "vulkan-memory-allocator",
+    "glfw3"
   ]
 }
