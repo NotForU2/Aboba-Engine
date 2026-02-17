@@ -41,3 +41,13 @@ void Window::Cleanup()
   glfwDestroyWindow(mWindow);
   glfwTerminate();
 }
+
+void Window::SetResizeCallback(VulkanRenderer *renderer)
+{
+  glfwSetWindowUserPointer(mWindow, renderer);
+
+  glfwSetFramebufferSizeCallback(mWindow, [](GLFWwindow *window, int width, int height)
+                                 {
+    auto app = reinterpret_cast<VulkanRenderer*>(glfwGetWindowUserPointer(window));
+    app->mFramebufferResized = true; });
+}

@@ -21,6 +21,7 @@ add_executable(Aboba-Engine
   src/graphics/VulkanContext.cpp
   src/graphics/VulkanTexture.cpp
   src/graphics/VulkanSwapchain.cpp
+  src/graphics/VulkanPipeline.cpp
 )
 
 target_link_libraries(Aboba-Engine PRIVATE

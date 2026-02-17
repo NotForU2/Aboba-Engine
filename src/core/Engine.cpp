@@ -23,6 +23,7 @@ bool Engine::Init()
   try
   {
     mVulkanRenderer.Init(mWindow.GetWindow(), mAppName, mEngineName);
+    mWindow.SetResizeCallback(&mVulkanRenderer);
   }
   catch (const std::exception &e)
   {

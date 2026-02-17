@@ -13,7 +13,7 @@ void VulkanRenderer::Init(GLFWwindow *window, const char *appName, const char *e
 
   CreateDescriptorSetLayout();
 
-  CreateGraphicsPipeline();
+  mPipeline.Create(mContext, "shaders/vert.spv", "shaders/frag.spv", mDescriptorSetLayout, mSwapchain.GetImageFormat(), mDepthFormat);
 
   LoadModel();
   CreateBuffers();
@@ -52,8 +52,7 @@ void VulkanRenderer::Cleanup()
   mVertexBuffer.Destroy(mContext.GetAllocator());
   mIndexBuffer.Destroy(mContext.GetAllocator());
 
-  vkDestroyPipeline(mContext.GetDevice(), mGraphicsPipeline, nullptr);
-  vkDestroyPipelineLayout(mContext.GetDevice(), mPipelineLayout, nullptr);
+  mPipeline.Destroy(mContext);
 
   vkDestroyDescriptorSetLayout(mContext.GetDevice(), mDescriptorSetLayout, nullptr);
 
@@ -63,199 +62,6 @@ void VulkanRenderer::Cleanup()
   mSwapchain.Destroy(mContext);
   mTexture.Destroy(mContext);
   mContext.Cleanup();
-}
-
-std::vector<char> VulkanRenderer::ReadFile(const std::string &filename)
-{
-  std::ifstream file(filename, std::ios::ate | std::ios::binary);
-
-  if (!file.is_open())
-  {
-    throw std::runtime_error("Failed to open file: " + filename);
-  }
-
-  size_t fileSize = (size_t)file.tellg();
-  std::vector<char> buffer(fileSize);
-
-  file.seekg(0);
-  file.read(buffer.data(), fileSize);
-  file.close();
-
-  return buffer;
-}
-
-VkShaderModule VulkanRenderer::CreateShaderModule(const std::vector<char> &code)
-{
-  VkShaderModuleCreateInfo createInfo{
-      .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
-      .codeSize = code.size(),
-      .pCode = reinterpret_cast<const uint32_t *>(code.data()),
-  };
-
-  VkShaderModule shaderModule;
-  if (vkCreateShaderModule(mContext.GetDevice(), &createInfo, nullptr, &shaderModule) != VK_SUCCESS)
-  {
-    throw std::runtime_error("Failed to create shader module");
-  }
-
-  return shaderModule;
-}
-
-void VulkanRenderer::CreateGraphicsPipeline()
-{
-  // Загрузка шейдеров
-  auto vertShaderCode = ReadFile("shaders/vert.spv");
-  auto fragShaderCode = ReadFile("shaders/frag.spv");
-
-  VkShaderModule vertShaderModule = CreateShaderModule(vertShaderCode);
-  VkShaderModule fragShaderModule = CreateShaderModule(fragShaderCode);
-
-  VkPipelineShaderStageCreateInfo vertShaderStageInfo{
-      .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-      .stage = VK_SHADER_STAGE_VERTEX_BIT,
-      .module = vertShaderModule,
-      .pName = "main",
-  };
-  VkPipelineShaderStageCreateInfo fragShaderStageInfo{
-      .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-      .stage = VK_SHADER_STAGE_FRAGMENT_BIT,
-      .module = fragShaderModule,
-      .pName = "main",
-  };
-
-  std::vector<VkPipelineShaderStageCreateInfo> shaderStages = {
-      vertShaderStageInfo,
-      fragShaderStageInfo,
-  };
-
-  // Vertex Input
-  auto bindingDescription = Vertex::getBindingDescription();
-  auto attributeDescriptions = Vertex::getAttributeDescriptions();
-
-  VkPipelineVertexInputStateCreateInfo vertexInputInfo{
-      .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
-      .vertexBindingDescriptionCount = 1,
-      .pVertexBindingDescriptions = &bindingDescription,
-      .vertexAttributeDescriptionCount = static_cast<uint32_t>(attributeDescriptions.size()),
-      .pVertexAttributeDescriptions = attributeDescriptions.data(),
-  };
-
-  // Input Assembly
-  VkPipelineInputAssemblyStateCreateInfo inputAssembly{
-      .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
-      .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
-      .primitiveRestartEnable = VK_FALSE,
-  };
-
-  // Viewport и Scissor
-  VkPipelineViewportStateCreateInfo viewportState{
-      .sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
-      .viewportCount = 1,
-      .scissorCount = 1,
-  };
-
-  // Rasterizer
-  VkPipelineRasterizationStateCreateInfo rasterizer{
-      .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
-      .depthClampEnable = VK_FALSE,
-      .rasterizerDiscardEnable = VK_FALSE,
-      .polygonMode = VK_POLYGON_MODE_FILL,
-      .cullMode = VK_CULL_MODE_BACK_BIT,
-      .frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE,
-      .depthBiasEnable = VK_FALSE,
-      .lineWidth = 1.0f,
-  };
-
-  // Multisampling
-  VkPipelineMultisampleStateCreateInfo multisampling{
-      .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
-      .rasterizationSamples = VK_SAMPLE_COUNT_1_BIT,
-      .sampleShadingEnable = VK_FALSE,
-  };
-
-  // Color Blending
-  VkPipelineColorBlendAttachmentState colorBlendAttachment{
-      .blendEnable = VK_FALSE,
-      .colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT,
-  };
-  VkPipelineColorBlendStateCreateInfo colorBlending{
-      .sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
-      .logicOpEnable = VK_FALSE,
-      .attachmentCount = 1,
-      .pAttachments = &colorBlendAttachment,
-  };
-
-  // Depth
-  VkPipelineDepthStencilStateCreateInfo depthStencil{
-      .sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
-      .depthTestEnable = VK_TRUE,
-      .depthWriteEnable = VK_TRUE,
-      .depthCompareOp = VK_COMPARE_OP_LESS,
-      .depthBoundsTestEnable = VK_FALSE,
-      .stencilTestEnable = VK_FALSE,
-  };
-
-  // Dynamic States
-  std::vector<VkDynamicState> dynamicStates = {
-      VK_DYNAMIC_STATE_VIEWPORT,
-      VK_DYNAMIC_STATE_SCISSOR,
-  };
-  VkPipelineDynamicStateCreateInfo pipelineDynamicState{
-      .sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
-      .dynamicStateCount = static_cast<uint32_t>(dynamicStates.size()),
-      .pDynamicStates = dynamicStates.data(),
-  };
-
-  // Pipeline Layout
-  VkPipelineLayoutCreateInfo pipelineLayoutInfo{
-      .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-      .setLayoutCount = 1,
-      .pSetLayouts = &mDescriptorSetLayout,
-  };
-
-  if (vkCreatePipelineLayout(mContext.GetDevice(), &pipelineLayoutInfo, nullptr, &mPipelineLayout) != VK_SUCCESS)
-  {
-    throw std::runtime_error("Failed to create pipeline layout");
-  }
-
-  // Pipeline Rendering
-  VkFormat swapchainFormat = mSwapchain.GetImageFormat();
-
-  VkPipelineRenderingCreateInfo pipelineRenderingInfo{
-      .sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO,
-      .colorAttachmentCount = 1,
-      .pColorAttachmentFormats = &swapchainFormat,
-      .depthAttachmentFormat = mDepthFormat,
-  };
-
-  // Main create info
-  VkGraphicsPipelineCreateInfo pipelineInfo{
-      .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
-      .pNext = &pipelineRenderingInfo,
-      .stageCount = 2,
-      .pStages = shaderStages.data(),
-      .pVertexInputState = &vertexInputInfo,
-      .pInputAssemblyState = &inputAssembly,
-      .pViewportState = &viewportState,
-      .pRasterizationState = &rasterizer,
-      .pMultisampleState = &multisampling,
-      .pDepthStencilState = &depthStencil,
-      .pColorBlendState = &colorBlending,
-      .pDynamicState = &pipelineDynamicState,
-      .layout = mPipelineLayout,
-      .renderPass = VK_NULL_HANDLE,
-      .subpass = 0,
-  };
-
-  if (vkCreateGraphicsPipelines(mContext.GetDevice(), VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &mGraphicsPipeline) != VK_SUCCESS)
-  {
-    throw std::runtime_error("Failed to create graphics pipeline");
-  }
-
-  std::cout << "Vulkan Graphics Pipeline created successfully" << std::endl;
-
-  vkDestroyShaderModule(mContext.GetDevice(), fragShaderModule, nullptr);
-  vkDestroyShaderModule(mContext.GetDevice(), vertShaderModule, nullptr);
 }
 
 void VulkanRenderer::CreateCommandBuffers()
@@ -331,6 +137,7 @@ void VulkanRenderer::CreatePipelineBarrierEntry(VkCommandBuffer commandBuffer, u
       .imageMemoryBarrierCount = 1,
       .pImageMemoryBarriers = &barrier,
   };
+
   vkCmdPipelineBarrier2(commandBuffer, &dependencyInfo);
 };
 
@@ -427,7 +234,7 @@ void VulkanRenderer::RecordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t
 
   // Render start
   vkCmdBeginRendering(commandBuffer, &renderingInfo);
-  vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mGraphicsPipeline);
+  mPipeline.Bind(commandBuffer);
 
   VkViewport viewport{
       .x = 0.0f,
@@ -455,7 +262,7 @@ void VulkanRenderer::RecordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t
 
   vkCmdBindIndexBuffer(commandBuffer, mIndexBuffer.GetBuffer(), 0, VK_INDEX_TYPE_UINT32);
 
-  vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mPipelineLayout, 0, 1, &mDescriptorSets[mCurrentFrame], 0, nullptr);
+  vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mPipeline.GetPipelineLayout(), 0, 1, &mDescriptorSets[mCurrentFrame], 0, nullptr);
   // Draw
   vkCmdDrawIndexed(commandBuffer, mIndicesCount, 1, 0, 0, 0);
   vkCmdDraw(commandBuffer, 3, 1, 0, 0);
@@ -482,6 +289,7 @@ void VulkanRenderer::DrawFrame()
 
   if (acquireNextImageResult == VK_ERROR_OUT_OF_DATE_KHR)
   {
+    RecreateSwapchain();
     return;
   }
   else if (acquireNextImageResult != VK_SUCCESS && acquireNextImageResult != VK_SUBOPTIMAL_KHR)
@@ -552,8 +360,10 @@ void VulkanRenderer::DrawFrame()
 
   VkResult queuePresentResult = vkQueuePresentKHR(mContext.GetPresentQueue(), &presentInfo);
 
-  if (queuePresentResult == VK_ERROR_OUT_OF_DATE_KHR || queuePresentResult == VK_SUBOPTIMAL_KHR)
+  if (queuePresentResult == VK_ERROR_OUT_OF_DATE_KHR || queuePresentResult == VK_SUBOPTIMAL_KHR || mFramebufferResized)
   {
+    mFramebufferResized = false;
+    RecreateSwapchain();
   }
   else if (queuePresentResult != VK_SUCCESS)
   {
@@ -884,4 +694,27 @@ void VulkanRenderer::CreateDepthResources()
   vkCmdPipelineBarrier2(commandBuffer, &dependencyInfo);
 
   mContext.EndSingleTimeCommands(commandBuffer);
+}
+
+void VulkanRenderer::RecreateSwapchain()
+{
+  int width = 0;
+  int height = 0;
+
+  glfwGetFramebufferSize(mContext.GetWindow(), &width, &height);
+
+  while (width == 0 || height == 0)
+  {
+    glfwGetFramebufferSize(mContext.GetWindow(), &width, &height);
+    glfwWaitEvents();
+  }
+
+  vkDeviceWaitIdle(mContext.GetDevice());
+
+  mSwapchain.Recreate(mContext);
+
+  vkDestroyImageView(mContext.GetDevice(), mDepthImageView, nullptr);
+  vmaDestroyImage(mContext.GetAllocator(), mDepthImage, mDepthAllocation);
+
+  CreateDepthResources();
 }

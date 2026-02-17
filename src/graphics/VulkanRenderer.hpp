@@ -18,6 +18,7 @@
 #include "VulkanContext.hpp"
 #include "VulkanTexture.hpp"
 #include "VulkanSwapchain.hpp"
+#include "VulkanPipeline.hpp"
 #include "Camera.hpp"
 #include "Vertex.hpp"
 
@@ -33,6 +34,8 @@ struct UniformBufferObject
 class VulkanRenderer
 {
 public:
+  bool mFramebufferResized = false;
+
   void Init(GLFWwindow *window, const char *appName, const char *engineName);
   void Cleanup();
   void DrawFrame();
@@ -41,8 +44,7 @@ public:
 private:
   VulkanContext mContext;
   VulkanSwapchain mSwapchain;
-  VkPipelineLayout mPipelineLayout;
-  VkPipeline mGraphicsPipeline;
+  VulkanPipeline mPipeline;
   std::vector<VkCommandBuffer> mCommandBuffers;
   std::vector<VkSemaphore> mImageAvailableSemaphores;
   std::vector<VkSemaphore> mRenderFinishedSemaphores;
@@ -65,9 +67,6 @@ private:
   VkImageView mDepthImageView;
   VkFormat mDepthFormat = VK_FORMAT_D32_SFLOAT;
 
-  static std::vector<char> ReadFile(const std::string &filename);
-  VkShaderModule CreateShaderModule(const std::vector<char> &code);
-  void CreateGraphicsPipeline();
   void CreatePipelineBarrierEntry(VkCommandBuffer commandBuffer, uint32_t imageIndex);
   void CreatePipelineBarrierOut(VkCommandBuffer commandBuffer, uint32_t imageIndex);
   void CreateCommandBuffers();
@@ -81,4 +80,5 @@ private:
   void UpdateUniformBuffer(uint32_t currentImage);
   void LoadModel();
   void CreateDepthResources();
+  void RecreateSwapchain();
 };

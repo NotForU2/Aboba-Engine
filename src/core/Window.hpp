@@ -1,4 +1,5 @@
 #pragma once
+#include "../graphics/VulkanRenderer.hpp"
 #include <GLFW/glfw3.h>
 #include <stdexcept>
 
@@ -12,6 +13,7 @@ public:
   void Cleanup();
   bool CanRender();
   GLFWwindow *GetWindow();
+  void SetResizeCallback(VulkanRenderer *renderer);
 
 private:
   int mWidth;
