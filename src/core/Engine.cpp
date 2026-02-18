@@ -23,7 +23,7 @@ bool Engine::Init()
   try
   {
     mVulkanRenderer.Init(mWindow.GetWindow(), mAppName, mEngineName);
-    mWindow.SetResizeCallback(&mVulkanRenderer);
+    mInputSystem.Init(mWindow.GetWindow());
   }
   catch (const std::exception &e)
   {
@@ -31,15 +31,15 @@ bool Engine::Init()
     return false;
   }
 
+  auto camera = mRegistry.create();
+  mRegistry.emplace<CameraComponent>(camera);
+
   auto unit1 = mRegistry.create();
-  mRegistry.emplace<Position>(unit1, 100.0f, 100.0f);
-  mRegistry.emplace<RenderData>(unit1, 32, 255, 0, 0);
-  mRegistry.emplace<Collider>(unit1, 16.0f, false);
+  mRegistry.emplace<TransformComponent>(unit1);
 
   auto unit2 = mRegistry.create();
-  mRegistry.emplace<Position>(unit2, 200.0f, 150.0f);
-  mRegistry.emplace<RenderData>(unit2, 32, 0, 0, 255);
-  mRegistry.emplace<Collider>(unit2, 16.0f, false);
+  auto &trans = mRegistry.emplace<TransformComponent>(unit2);
+  trans.position = {0.0f, 0.0f, 5.0f};
 
   mIsRunning = true;
 
@@ -54,15 +54,15 @@ void Engine::Run()
   {
     float dt = timer.Tick();
 
-    ProccessInput();
+    ProccessInput(dt);
     Update(dt);
     Render();
   }
 }
 
-void Engine::ProccessInput()
+void Engine::ProccessInput(float dt)
 {
-  mInputSystem.HandleEvents(mWindow.GetWindow(), mRegistry, mIsRunning);
+  mInputSystem.HandleEvents(mWindow.GetWindow(), mRegistry, dt, mIsRunning);
 }
 
 void Engine::Update(float dt)
@@ -75,6 +75,6 @@ void Engine::Render()
 {
   if (mWindow.CanRender())
   {
-    mVulkanRenderer.DrawFrame();
+    mVulkanRenderer.DrawFrame(mRegistry);
   }
 }

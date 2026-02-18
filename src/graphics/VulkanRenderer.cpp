@@ -5,9 +5,9 @@
 void VulkanRenderer::Init(GLFWwindow *window, const char *appName, const char *engineName)
 {
   mContext.Init(window, appName, engineName);
+  SetFramebufferSizeCallback(window);
 
   mSwapchain.Create(mContext);
-  mCamera.SetProjection(45.0f, mSwapchain.GetExtent().width / mSwapchain.GetExtent().height, 0.1f, 10.0f);
 
   CreateDepthResources();
 
@@ -169,7 +169,7 @@ void VulkanRenderer::CreatePipelineBarrierOut(VkCommandBuffer commandBuffer, uin
   vkCmdPipelineBarrier2(commandBuffer, &dependencyInfo);
 };
 
-void VulkanRenderer::RecordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex)
+void VulkanRenderer::RecordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex, entt::registry &registry)
 {
   VkCommandBufferBeginInfo beginInfo{
       .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
@@ -263,6 +263,30 @@ void VulkanRenderer::RecordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t
   vkCmdBindIndexBuffer(commandBuffer, mIndexBuffer.GetBuffer(), 0, VK_INDEX_TYPE_UINT32);
 
   vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mPipeline.GetPipelineLayout(), 0, 1, &mDescriptorSets[mCurrentFrame], 0, nullptr);
+
+  auto view = registry.view<TransformComponent>();
+
+  for (auto entity : view)
+  {
+    auto &transform = view.get<TransformComponent>(entity);
+
+    // Подготавливаем данные для Push Constant
+    MeshPushConstants constants{};
+    constants.model = transform.GetModelMatrix();
+
+    // Отправляем данные ПРЯМО в командный буфер
+    vkCmdPushConstants(
+        commandBuffer,
+        mPipeline.GetPipelineLayout(),
+        VK_SHADER_STAGE_VERTEX_BIT,
+        0,
+        sizeof(MeshPushConstants),
+        &constants);
+
+    // Рисуем меш (пока используем общий индексный буфер)
+    vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(mIndices.size()), 1, 0, 0, 0);
+  }
+
   // Draw
   vkCmdDrawIndexed(commandBuffer, mIndicesCount, 1, 0, 0, 0);
   vkCmdDraw(commandBuffer, 3, 1, 0, 0);
@@ -278,7 +302,7 @@ void VulkanRenderer::RecordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t
   }
 }
 
-void VulkanRenderer::DrawFrame()
+void VulkanRenderer::DrawFrame(entt::registry &registry)
 {
   // Ждем завершения предыдущего кадра
   vkWaitForFences(mContext.GetDevice(), 1, &mInFlightFences[mCurrentFrame], VK_TRUE, UINT64_MAX);
@@ -302,7 +326,7 @@ void VulkanRenderer::DrawFrame()
 
   // Записываем команды
   vkResetCommandBuffer(mCommandBuffers[mCurrentFrame], 0);
-  RecordCommandBuffer(mCommandBuffers[mCurrentFrame], imageIndex);
+  RecordCommandBuffer(mCommandBuffers[mCurrentFrame], imageIndex, registry);
 
   // Инфо Semaphore ожидания
   VkSemaphoreSubmitInfo waitSemaphoreInfo{
@@ -340,7 +364,7 @@ void VulkanRenderer::DrawFrame()
       .pSignalSemaphoreInfos = &signalSemaphoreInfo,
   };
 
-  UpdateUniformBuffer(mCurrentFrame);
+  UpdateUniformBuffer(mCurrentFrame, registry);
 
   if (vkQueueSubmit2(mContext.GetGraphicsQueue(), 1, &submitInfo, mInFlightFences[mCurrentFrame]) != VK_SUCCESS)
   {
@@ -554,16 +578,22 @@ void VulkanRenderer::CreateDescriptorSets()
   }
 }
 
-void VulkanRenderer::UpdateUniformBuffer(uint32_t currentImage)
+void VulkanRenderer::UpdateUniformBuffer(uint32_t currentImage, entt::registry &registry)
 {
-  static auto startTime = std::chrono::high_resolution_clock::now();
-  auto currentTime = std::chrono::high_resolution_clock::now();
-  float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
+  auto view = registry.view<CameraComponent>();
+  if (view.empty())
+  {
+    return;
+  }
+
+  const auto &camera = view.get<CameraComponent>(view.front());
+  float aspectRatio = static_cast<float>(mSwapchain.GetExtent().width) / static_cast<float>(mSwapchain.GetExtent().height);
+  auto proj = glm::perspective(glm::radians(camera.fov), aspectRatio, 0.1f, 100.0f);
+  proj[1][1] *= -1;
 
   UniformBufferObject ubo{
-      .model = glm::rotate(glm::mat4(1.0f), time * glm::radians(90.0f), glm::vec3(1.0f, 0.0f, 0.0f)),
-      .view = mCamera.GetView(),
-      .proj = mCamera.GetProjection(),
+      .view = camera.GetModelMatrix(),
+      .proj = proj,
   };
 
   memcpy(mUniformBuffersMapped[currentImage], &ubo, sizeof(ubo));
@@ -718,3 +748,13 @@ void VulkanRenderer::RecreateSwapchain()
 
   CreateDepthResources();
 }
+
+void VulkanRenderer::SetFramebufferSizeCallback(GLFWwindow *window)
+{
+  glfwSetWindowUserPointer(window, this);
+
+  glfwSetFramebufferSizeCallback(window, [](GLFWwindow *window, int width, int height)
+                                 {
+    auto self = reinterpret_cast<VulkanRenderer*>(glfwGetWindowUserPointer(window));
+    self->mFramebufferResized = true; });
+};

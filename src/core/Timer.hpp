@@ -19,7 +19,7 @@ public:
   {
     uint64_t currentTime = glfwGetTimerValue();
     uint64_t deltaTicks = currentTime - mLastTime;
-    float dt = static_cast<float>(deltaTicks / mFrequency);
+    float dt = static_cast<float>(deltaTicks) / static_cast<float>(mFrequency);
 
     mLastTime = currentTime;
 

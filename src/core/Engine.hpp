@@ -3,6 +3,8 @@
 #include "Window.hpp"
 #include "Timer.hpp"
 #include "../ecs/Components.hpp"
+#include "../ecs/CameraComponent.hpp"
+#include "../ecs/TransformComponent.hpp"
 #include "../system/InputSystem.hpp"
 #include "../system/MovementSystem.hpp"
 #include "../system/CollisionSystem.hpp"
@@ -18,7 +20,7 @@ public:
   void Run();
 
 private:
-  void ProccessInput();
+  void ProccessInput(float dt);
   void Update(float dt);
   void Render();
 

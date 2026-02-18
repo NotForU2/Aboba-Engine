@@ -1,5 +1,6 @@
 #include "Window.hpp"
 #include "Logger.hpp"
+#include "../system/InputSystem.hpp"
 
 Window::Window() {}
 
@@ -27,6 +28,8 @@ void Window::Init(const char *title, int width, int height)
     throw std::runtime_error("Failed to create window");
   }
 
+  glfwSetInputMode(mWindow, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+
   mWidth = width;
   mHeight = height;
 }
@@ -40,14 +43,4 @@ void Window::Cleanup()
 {
   glfwDestroyWindow(mWindow);
   glfwTerminate();
-}
-
-void Window::SetResizeCallback(VulkanRenderer *renderer)
-{
-  glfwSetWindowUserPointer(mWindow, renderer);
-
-  glfwSetFramebufferSizeCallback(mWindow, [](GLFWwindow *window, int width, int height)
-                                 {
-    auto app = reinterpret_cast<VulkanRenderer*>(glfwGetWindowUserPointer(window));
-    app->mFramebufferResized = true; });
 }

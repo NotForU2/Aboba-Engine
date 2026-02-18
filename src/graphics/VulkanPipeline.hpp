@@ -4,6 +4,11 @@
 #include <string>
 #include <vector>
 
+struct MeshPushConstants
+{
+  glm::mat4 model;
+};
+
 class VulkanPipeline
 {
 public:
