@@ -1,4 +1,5 @@
 #include "InputSystem.hpp"
+#include <iostream>
 
 void InputSystem::Init(GLFWwindow *window)
 {
@@ -19,10 +20,8 @@ void InputSystem::HandleEvents(GLFWwindow *window, entt::registry &registry, flo
   }
 
   auto view = registry.view<CameraComponent>();
-  for (auto entity : view)
+  for (auto [entity, camera] : view.each())
   {
-    auto &camera = view.get<CameraComponent>(entity);
-
     float moveSpeed = 10.0f * dt;
     float zoomSpeed = 2.0f;
 

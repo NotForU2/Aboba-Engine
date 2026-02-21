@@ -20,9 +20,12 @@
 #include "VulkanTexture.hpp"
 #include "VulkanSwapchain.hpp"
 #include "VulkanPipeline.hpp"
+#include "VulkanMesh.hpp"
 #include "Vertex.hpp"
+#include "RenderTypes.hpp"
 #include "../ecs/CameraComponent.hpp"
 #include "../ecs/TransformComponent.hpp"
+#include "../ecs/MeshComponent.hpp"
 
 const uint32_t MAX_FRAMES_IN_FLIGHT = 2;
 
@@ -37,13 +40,13 @@ class VulkanRenderer
 public:
   bool mFramebufferResized = false;
 
-  void Init(GLFWwindow *window, const char *appName, const char *engineName);
+  void Init(VulkanContext *context);
   void Cleanup();
-  void DrawFrame(entt::registry &registry);
-  void DeviceWaitIdle();
+  void DrawFrame(const std::vector<RenderObject> &renderQueue, const CameraRenderData &cameraData);
+  void WaitIdle();
 
 private:
-  VulkanContext mContext;
+  VulkanContext *mContext = nullptr;
   VulkanSwapchain mSwapchain;
   VulkanPipeline mPipeline;
   std::vector<VkCommandBuffer> mCommandBuffers;
@@ -51,35 +54,28 @@ private:
   std::vector<VkSemaphore> mRenderFinishedSemaphores;
   std::vector<VkFence> mInFlightFences;
   uint32_t mCurrentFrame = 0;
-  VulkanBuffer mVertexBuffer;
-  VulkanBuffer mIndexBuffer;
-  uint32_t mIndicesCount = 0;
   VkDescriptorSetLayout mDescriptorSetLayout;
   VkDescriptorPool mDescriptorPool;
   std::vector<VkDescriptorSet> mDescriptorSets;
   std::vector<VulkanBuffer> mUniformBuffers;
   std::vector<void *> mUniformBuffersMapped;
   VulkanTexture mTexture;
-  std::vector<Vertex> mVertices;
-  std::vector<uint32_t> mIndices;
   VkImage mDepthImage;
   VmaAllocation mDepthAllocation;
   VkImageView mDepthImageView;
   VkFormat mDepthFormat = VK_FORMAT_D32_SFLOAT;
 
-  void SetFramebufferSizeCallback(GLFWwindow *window);
+  void SetFramebufferSizeCallback();
   void CreatePipelineBarrierEntry(VkCommandBuffer commandBuffer, uint32_t imageIndex);
   void CreatePipelineBarrierOut(VkCommandBuffer commandBuffer, uint32_t imageIndex);
   void CreateCommandBuffers();
-  void RecordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex, entt::registry &registry);
+  void RecordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex, const std::vector<RenderObject> &renderQueue);
   void CreateSyncObjects();
-  void CreateBuffers();
   void CreateDescriptorSetLayout();
   void CreateUniformBuffers();
   void CreateDescriptorPool();
   void CreateDescriptorSets();
-  void UpdateUniformBuffer(uint32_t currentImage, entt::registry &registry);
-  void LoadModel();
+  void UpdateUniformBuffer(uint32_t currentImage, const CameraRenderData &cameraData);
   void CreateDepthResources();
   void RecreateSwapchain();
 };

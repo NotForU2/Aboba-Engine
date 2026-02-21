@@ -13,6 +13,7 @@ find_package(VulkanMemoryAllocator REQUIRED)
 add_executable(Aboba-Engine 
   src/main.cpp
   src/core/Engine.cpp
+  src/core/Scene.cpp
   src/core/Window.cpp
   src/system/InputSystem.cpp
   src/system/CollisionSystem.cpp
@@ -22,6 +23,8 @@ add_executable(Aboba-Engine
   src/graphics/VulkanTexture.cpp
   src/graphics/VulkanSwapchain.cpp
   src/graphics/VulkanPipeline.cpp
+  src/graphics/VulkanMesh.cpp
+  src/graphics/AssetManager.cpp
 )
 
 target_link_libraries(Aboba-Engine PRIVATE

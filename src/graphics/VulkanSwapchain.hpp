@@ -13,9 +13,9 @@ struct SwapchainSupportDetails
 class VulkanSwapchain
 {
 public:
-  void Create(VulkanContext &context);
-  void Destroy(const VulkanContext &context);
-  void Recreate(VulkanContext &context);
+  void Create(VulkanContext *context);
+  void Destroy(const VulkanContext *context);
+  void Recreate(VulkanContext *context);
 
   VkSwapchainKHR GetSwapchain() const { return mSwapchain; }
   VkFormat GetImageFormat() const { return mImageFormat; }
@@ -32,10 +32,10 @@ private:
   VkFormat mImageFormat;
   VkExtent2D mExtent;
 
-  void CreateSwapchain(VulkanContext &context);
-  void CreateImageViews(VulkanContext &context);
-  SwapchainSupportDetails QuerySupport(VulkanContext &context);
+  void CreateSwapchain(VulkanContext *context);
+  void CreateImageViews(VulkanContext *context);
+  SwapchainSupportDetails QuerySupport(VulkanContext *context);
   VkSurfaceFormat2KHR ChooseSurfaceFormat(const std::vector<VkSurfaceFormat2KHR> &availableFormats);
   VkPresentModeKHR ChoosePresentMode(const std::vector<VkPresentModeKHR> &availablePresentModes);
-  VkExtent2D ChooseExtent(VulkanContext &context, const VkSurfaceCapabilities2KHR &capabilities);
+  VkExtent2D ChooseExtent(VulkanContext *context, const VkSurfaceCapabilities2KHR &capabilities);
 };

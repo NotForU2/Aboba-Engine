@@ -1,11 +1,9 @@
 #include "VulkanRenderer.hpp"
-#define TINYOBJLOADER_IMPLEMENTATION
-#include "tiny_obj_loader.h"
 
-void VulkanRenderer::Init(GLFWwindow *window, const char *appName, const char *engineName)
+void VulkanRenderer::Init(VulkanContext *context)
 {
-  mContext.Init(window, appName, engineName);
-  SetFramebufferSizeCallback(window);
+  mContext = context;
+  SetFramebufferSizeCallback();
 
   mSwapchain.Create(mContext);
 
@@ -15,8 +13,6 @@ void VulkanRenderer::Init(GLFWwindow *window, const char *appName, const char *e
 
   mPipeline.Create(mContext, "shaders/vert.spv", "shaders/frag.spv", mDescriptorSetLayout, mSwapchain.GetImageFormat(), mDepthFormat);
 
-  LoadModel();
-  CreateBuffers();
   CreateUniformBuffers();
 
   mTexture.Create(mContext, "textures/Image_1.jpg");
@@ -30,38 +26,45 @@ void VulkanRenderer::Init(GLFWwindow *window, const char *appName, const char *e
 
 void VulkanRenderer::Cleanup()
 {
-  vkDeviceWaitIdle(mContext.GetDevice());
+  WaitIdle();
 
   for (size_t i = 0; i != MAX_FRAMES_IN_FLIGHT; ++i)
   {
-    vkDestroySemaphore(mContext.GetDevice(), mImageAvailableSemaphores[i], nullptr);
-    vkDestroyFence(mContext.GetDevice(), mInFlightFences[i], nullptr);
+    vkDestroySemaphore(mContext->GetDevice(), mImageAvailableSemaphores[i], nullptr);
+    vkDestroyFence(mContext->GetDevice(), mInFlightFences[i], nullptr);
   }
   for (size_t i = 0; i != mRenderFinishedSemaphores.size(); ++i)
   {
-    vkDestroySemaphore(mContext.GetDevice(), mRenderFinishedSemaphores[i], nullptr);
+    vkDestroySemaphore(mContext->GetDevice(), mRenderFinishedSemaphores[i], nullptr);
   }
 
-  vkDestroyDescriptorPool(mContext.GetDevice(), mDescriptorPool, nullptr);
+  vkDestroyDescriptorPool(mContext->GetDevice(), mDescriptorPool, nullptr);
 
   for (size_t i = 0; i != MAX_FRAMES_IN_FLIGHT; ++i)
   {
-    mUniformBuffers[i].Unmap(mContext.GetAllocator());
-    mUniformBuffers[i].Destroy(mContext.GetAllocator());
+    mUniformBuffers[i].Unmap(mContext->GetAllocator());
+    mUniformBuffers[i].Destroy(mContext->GetAllocator());
   }
-  mVertexBuffer.Destroy(mContext.GetAllocator());
-  mIndexBuffer.Destroy(mContext.GetAllocator());
 
   mPipeline.Destroy(mContext);
 
-  vkDestroyDescriptorSetLayout(mContext.GetDevice(), mDescriptorSetLayout, nullptr);
+  vkDestroyDescriptorSetLayout(mContext->GetDevice(), mDescriptorSetLayout, nullptr);
 
-  vkDestroyImageView(mContext.GetDevice(), mDepthImageView, nullptr);
-  vmaDestroyImage(mContext.GetAllocator(), mDepthImage, mDepthAllocation);
+  vkDestroyImageView(mContext->GetDevice(), mDepthImageView, nullptr);
+  vmaDestroyImage(mContext->GetAllocator(), mDepthImage, mDepthAllocation);
 
   mSwapchain.Destroy(mContext);
   mTexture.Destroy(mContext);
-  mContext.Cleanup();
+
+  mContext = nullptr;
+}
+
+void VulkanRenderer::WaitIdle()
+{
+  if (mContext && mContext->GetDevice() != VK_NULL_HANDLE)
+  {
+    vkDeviceWaitIdle(mContext->GetDevice());
+  }
 }
 
 void VulkanRenderer::CreateCommandBuffers()
@@ -70,11 +73,11 @@ void VulkanRenderer::CreateCommandBuffers()
 
   VkCommandBufferAllocateInfo allocInfo{
       .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-      .commandPool = mContext.GetCommandPool(),
+      .commandPool = mContext->GetCommandPool(),
       .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
       .commandBufferCount = static_cast<uint32_t>(mCommandBuffers.size()),
   };
-  if (vkAllocateCommandBuffers(mContext.GetDevice(), &allocInfo, mCommandBuffers.data()) != VK_SUCCESS)
+  if (vkAllocateCommandBuffers(mContext->GetDevice(), &allocInfo, mCommandBuffers.data()) != VK_SUCCESS)
   {
     throw std::runtime_error("Failed to allocate command buffers");
   }
@@ -96,8 +99,8 @@ void VulkanRenderer::CreateSyncObjects()
 
   for (size_t i = 0; i != MAX_FRAMES_IN_FLIGHT; ++i)
   {
-    if (vkCreateSemaphore(mContext.GetDevice(), &semaphoreInfo, nullptr, &mImageAvailableSemaphores[i]) != VK_SUCCESS ||
-        vkCreateFence(mContext.GetDevice(), &fenceInfo, nullptr, &mInFlightFences[i]) != VK_SUCCESS)
+    if (vkCreateSemaphore(mContext->GetDevice(), &semaphoreInfo, nullptr, &mImageAvailableSemaphores[i]) != VK_SUCCESS ||
+        vkCreateFence(mContext->GetDevice(), &fenceInfo, nullptr, &mInFlightFences[i]) != VK_SUCCESS)
     {
       throw std::runtime_error("Failed to create sync objects for a frame");
     }
@@ -105,7 +108,7 @@ void VulkanRenderer::CreateSyncObjects()
 
   for (size_t i = 0; i != mSwapchain.GetImages().size(); ++i)
   {
-    if (vkCreateSemaphore(mContext.GetDevice(), &semaphoreInfo, nullptr, &mRenderFinishedSemaphores[i]) != VK_SUCCESS)
+    if (vkCreateSemaphore(mContext->GetDevice(), &semaphoreInfo, nullptr, &mRenderFinishedSemaphores[i]) != VK_SUCCESS)
     {
       throw std::runtime_error("Failed to create sync objects for a frame");
     }
@@ -169,7 +172,7 @@ void VulkanRenderer::CreatePipelineBarrierOut(VkCommandBuffer commandBuffer, uin
   vkCmdPipelineBarrier2(commandBuffer, &dependencyInfo);
 };
 
-void VulkanRenderer::RecordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex, entt::registry &registry)
+void VulkanRenderer::RecordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex, const std::vector<RenderObject> &renderQueue)
 {
   VkCommandBufferBeginInfo beginInfo{
       .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
@@ -256,25 +259,24 @@ void VulkanRenderer::RecordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t
   vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
   // Bind buffer
-  std::vector<VkBuffer> vertexBuffer = {mVertexBuffer.GetBuffer()};
-  std::vector<VkDeviceSize> offsets = {0};
-  vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffer.data(), offsets.data());
-
-  vkCmdBindIndexBuffer(commandBuffer, mIndexBuffer.GetBuffer(), 0, VK_INDEX_TYPE_UINT32);
-
   vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mPipeline.GetPipelineLayout(), 0, 1, &mDescriptorSets[mCurrentFrame], 0, nullptr);
 
-  auto view = registry.view<TransformComponent>();
-
-  for (auto entity : view)
+  for (const auto &obj : renderQueue)
   {
-    auto &transform = view.get<TransformComponent>(entity);
+    if (!obj.mesh)
+    {
+      continue;
+    };
 
-    // Подготавливаем данные для Push Constant
-    MeshPushConstants constants{};
-    constants.model = transform.GetModelMatrix();
+    std::array<VkBuffer, 1> vertexBuffers = {obj.mesh->vertexBuffer.GetBuffer()};
+    std::array<VkDeviceSize, 1> offsets = {0};
+    vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers.data(), offsets.data());
+    vkCmdBindIndexBuffer(commandBuffer, obj.mesh->indexBuffer.GetBuffer(), 0, VK_INDEX_TYPE_UINT32);
 
-    // Отправляем данные ПРЯМО в командный буфер
+    MeshPushConstants constants{
+        .model = obj.transform,
+    };
+
     vkCmdPushConstants(
         commandBuffer,
         mPipeline.GetPipelineLayout(),
@@ -283,12 +285,10 @@ void VulkanRenderer::RecordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t
         sizeof(MeshPushConstants),
         &constants);
 
-    // Рисуем меш (пока используем общий индексный буфер)
-    vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(mIndices.size()), 1, 0, 0, 0);
+    vkCmdDrawIndexed(commandBuffer, obj.mesh->indexCount, 1, 0, 0, 0);
   }
 
   // Draw
-  vkCmdDrawIndexed(commandBuffer, mIndicesCount, 1, 0, 0, 0);
   vkCmdDraw(commandBuffer, 3, 1, 0, 0);
 
   vkCmdEndRendering(commandBuffer);
@@ -302,14 +302,14 @@ void VulkanRenderer::RecordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t
   }
 }
 
-void VulkanRenderer::DrawFrame(entt::registry &registry)
+void VulkanRenderer::DrawFrame(const std::vector<RenderObject> &renderQueue, const CameraRenderData &cameraData)
 {
   // Ждем завершения предыдущего кадра
-  vkWaitForFences(mContext.GetDevice(), 1, &mInFlightFences[mCurrentFrame], VK_TRUE, UINT64_MAX);
+  vkWaitForFences(mContext->GetDevice(), 1, &mInFlightFences[mCurrentFrame], VK_TRUE, UINT64_MAX);
 
   // Индекс картинки из Swapchain
   uint32_t imageIndex;
-  VkResult acquireNextImageResult = vkAcquireNextImageKHR(mContext.GetDevice(), mSwapchain.GetSwapchain(), UINT64_MAX, mImageAvailableSemaphores[mCurrentFrame], VK_NULL_HANDLE, &imageIndex);
+  VkResult acquireNextImageResult = vkAcquireNextImageKHR(mContext->GetDevice(), mSwapchain.GetSwapchain(), UINT64_MAX, mImageAvailableSemaphores[mCurrentFrame], VK_NULL_HANDLE, &imageIndex);
 
   if (acquireNextImageResult == VK_ERROR_OUT_OF_DATE_KHR)
   {
@@ -322,11 +322,11 @@ void VulkanRenderer::DrawFrame(entt::registry &registry)
   }
 
   // Сброс fances
-  vkResetFences(mContext.GetDevice(), 1, &mInFlightFences[mCurrentFrame]);
+  vkResetFences(mContext->GetDevice(), 1, &mInFlightFences[mCurrentFrame]);
 
   // Записываем команды
   vkResetCommandBuffer(mCommandBuffers[mCurrentFrame], 0);
-  RecordCommandBuffer(mCommandBuffers[mCurrentFrame], imageIndex, registry);
+  RecordCommandBuffer(mCommandBuffers[mCurrentFrame], imageIndex, renderQueue);
 
   // Инфо Semaphore ожидания
   VkSemaphoreSubmitInfo waitSemaphoreInfo{
@@ -364,9 +364,9 @@ void VulkanRenderer::DrawFrame(entt::registry &registry)
       .pSignalSemaphoreInfos = &signalSemaphoreInfo,
   };
 
-  UpdateUniformBuffer(mCurrentFrame, registry);
+  UpdateUniformBuffer(mCurrentFrame, cameraData);
 
-  if (vkQueueSubmit2(mContext.GetGraphicsQueue(), 1, &submitInfo, mInFlightFences[mCurrentFrame]) != VK_SUCCESS)
+  if (vkQueueSubmit2(mContext->GetGraphicsQueue(), 1, &submitInfo, mInFlightFences[mCurrentFrame]) != VK_SUCCESS)
   {
     throw std::runtime_error("Failed to submit draw command biffer");
   }
@@ -382,7 +382,7 @@ void VulkanRenderer::DrawFrame(entt::registry &registry)
       .pImageIndices = &imageIndex,
   };
 
-  VkResult queuePresentResult = vkQueuePresentKHR(mContext.GetPresentQueue(), &presentInfo);
+  VkResult queuePresentResult = vkQueuePresentKHR(mContext->GetPresentQueue(), &presentInfo);
 
   if (queuePresentResult == VK_ERROR_OUT_OF_DATE_KHR || queuePresentResult == VK_SUBOPTIMAL_KHR || mFramebufferResized)
   {
@@ -395,52 +395,6 @@ void VulkanRenderer::DrawFrame(entt::registry &registry)
   }
 
   mCurrentFrame = (mCurrentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
-}
-
-void VulkanRenderer::CreateBuffers()
-{
-  mIndicesCount = static_cast<uint32_t>(mIndices.size());
-
-  VkDeviceSize vertexBufferSize = sizeof(Vertex) * mVertices.size();
-  VkDeviceSize indexBufferSize = sizeof(uint32_t) * mIndices.size();
-
-  // Vertex
-  VulkanBuffer stagingBufferVertex;
-  stagingBufferVertex.Create(mContext.GetAllocator(),
-                             vertexBufferSize,
-                             VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-                             VMA_MEMORY_USAGE_AUTO,
-                             VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT);
-  stagingBufferVertex.Upload(mContext.GetAllocator(), mVertices.data(), vertexBufferSize);
-
-  mVertexBuffer.Create(mContext.GetAllocator(),
-                       vertexBufferSize,
-                       VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-                       VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE,
-                       0);
-
-  mContext.CopyBuffer(stagingBufferVertex.GetBuffer(), mVertexBuffer.GetBuffer(), vertexBufferSize);
-
-  stagingBufferVertex.Destroy(mContext.GetAllocator());
-
-  // Index
-  VulkanBuffer stagingBufferIndex;
-  stagingBufferIndex.Create(mContext.GetAllocator(),
-                            indexBufferSize,
-                            VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-                            VMA_MEMORY_USAGE_AUTO,
-                            VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT);
-  stagingBufferIndex.Upload(mContext.GetAllocator(), mIndices.data(), indexBufferSize);
-
-  mIndexBuffer.Create(mContext.GetAllocator(),
-                      indexBufferSize,
-                      VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
-                      VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE,
-                      0);
-
-  mContext.CopyBuffer(stagingBufferIndex.GetBuffer(), mIndexBuffer.GetBuffer(), indexBufferSize);
-
-  stagingBufferIndex.Destroy(mContext.GetAllocator());
 }
 
 void VulkanRenderer::CreateDescriptorSetLayout()
@@ -468,7 +422,7 @@ void VulkanRenderer::CreateDescriptorSetLayout()
       .pBindings = bindings.data(),
   };
 
-  if (vkCreateDescriptorSetLayout(mContext.GetDevice(), &layoutInfo, nullptr, &mDescriptorSetLayout) != VK_SUCCESS)
+  if (vkCreateDescriptorSetLayout(mContext->GetDevice(), &layoutInfo, nullptr, &mDescriptorSetLayout) != VK_SUCCESS)
   {
     throw std::runtime_error("Failed to create descriptor set layout");
   }
@@ -486,13 +440,13 @@ void VulkanRenderer::CreateUniformBuffers()
     // HOST_VISIBLE | HOST_COHERENT
     // Идеально было бы DEVICE_LOCAL | HOST_VISIBLE (ReBar)
     mUniformBuffers[i].Create(
-        mContext.GetAllocator(),
+        mContext->GetAllocator(),
         bufferSize,
         VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
         VMA_MEMORY_USAGE_AUTO,
         VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT);
 
-    mUniformBuffersMapped[i] = mUniformBuffers[i].Map(mContext.GetAllocator());
+    mUniformBuffersMapped[i] = mUniformBuffers[i].Map(mContext->GetAllocator());
   }
 }
 
@@ -517,7 +471,7 @@ void VulkanRenderer::CreateDescriptorPool()
       .pPoolSizes = poolSizes.data(),
   };
 
-  if (vkCreateDescriptorPool(mContext.GetDevice(), &poolInfo, nullptr, &mDescriptorPool) != VK_SUCCESS)
+  if (vkCreateDescriptorPool(mContext->GetDevice(), &poolInfo, nullptr, &mDescriptorPool) != VK_SUCCESS)
   {
     throw std::runtime_error("Failed to create descriptor pool");
   }
@@ -535,7 +489,7 @@ void VulkanRenderer::CreateDescriptorSets()
   };
 
   mDescriptorSets.resize(MAX_FRAMES_IN_FLIGHT);
-  if (vkAllocateDescriptorSets(mContext.GetDevice(), &allocInfo, mDescriptorSets.data()) != VK_SUCCESS)
+  if (vkAllocateDescriptorSets(mContext->GetDevice(), &allocInfo, mDescriptorSets.data()) != VK_SUCCESS)
   {
     throw std::runtime_error("Failed to allocate descriptor sets");
   }
@@ -574,77 +528,19 @@ void VulkanRenderer::CreateDescriptorSets()
 
     std::array<VkWriteDescriptorSet, 2> descriptorWrites{bufferDescriptorWrite, imageDescriptorWrite};
 
-    vkUpdateDescriptorSets(mContext.GetDevice(), static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
+    vkUpdateDescriptorSets(mContext->GetDevice(), static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
   }
 }
 
-void VulkanRenderer::UpdateUniformBuffer(uint32_t currentImage, entt::registry &registry)
+void VulkanRenderer::UpdateUniformBuffer(uint32_t currentImage, const CameraRenderData &cameraData)
 {
-  auto view = registry.view<CameraComponent>();
-  if (view.empty())
-  {
-    return;
-  }
-
-  const auto &camera = view.get<CameraComponent>(view.front());
-  float aspectRatio = static_cast<float>(mSwapchain.GetExtent().width) / static_cast<float>(mSwapchain.GetExtent().height);
-  auto proj = glm::perspective(glm::radians(camera.fov), aspectRatio, 0.1f, 100.0f);
-  proj[1][1] *= -1;
-
   UniformBufferObject ubo{
-      .view = camera.GetModelMatrix(),
-      .proj = proj,
+      .view = cameraData.view,
+      .proj = cameraData.projection,
   };
+  ubo.proj[1][1] *= -1;
 
   memcpy(mUniformBuffersMapped[currentImage], &ubo, sizeof(ubo));
-}
-
-void VulkanRenderer::LoadModel()
-{
-  tinyobj::attrib_t attrib;
-  std::vector<tinyobj::shape_t> shapes;
-  std::vector<tinyobj::material_t> materials;
-  std::string warn, err;
-
-  std::string modelPath = "models/Panda.obj";
-
-  if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, modelPath.c_str()))
-  {
-    throw std::runtime_error(warn + err);
-  }
-
-  std::unordered_map<Vertex, uint32_t> uniqueVertices{};
-
-  for (const auto &shape : shapes)
-  {
-    for (const auto &index : shape.mesh.indices)
-    {
-      Vertex vertex{};
-
-      vertex.pos = {
-          attrib.vertices[3 * index.vertex_index + 0],
-          attrib.vertices[3 * index.vertex_index + 1],
-          attrib.vertices[3 * index.vertex_index + 2],
-      };
-
-      if (index.texcoord_index >= 0)
-      {
-        vertex.texCoord = {
-            attrib.texcoords[2 * index.texcoord_index + 0],
-            1.0f - attrib.texcoords[2 * index.texcoord_index + 1],
-        };
-      }
-
-      vertex.color = {1.0f, 1.0f, 1.0f};
-
-      if (uniqueVertices.count(vertex) == 0)
-      {
-        uniqueVertices[vertex] = static_cast<uint32_t>(mVertices.size());
-        mVertices.push_back(vertex);
-      }
-      mIndices.push_back(uniqueVertices[vertex]);
-    }
-  }
 }
 
 void VulkanRenderer::CreateDepthResources()
@@ -671,7 +567,7 @@ void VulkanRenderer::CreateDepthResources()
       .usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE,
   };
 
-  if (vmaCreateImage(mContext.GetAllocator(), &imageInfo, &allocInfo, &mDepthImage, &mDepthAllocation, nullptr) != VK_SUCCESS)
+  if (vmaCreateImage(mContext->GetAllocator(), &imageInfo, &allocInfo, &mDepthImage, &mDepthAllocation, nullptr) != VK_SUCCESS)
   {
     throw std::runtime_error("Failed to create depth image");
   }
@@ -690,12 +586,12 @@ void VulkanRenderer::CreateDepthResources()
       },
   };
 
-  if (vkCreateImageView(mContext.GetDevice(), &viewInfo, nullptr, &mDepthImageView) != VK_SUCCESS)
+  if (vkCreateImageView(mContext->GetDevice(), &viewInfo, nullptr, &mDepthImageView) != VK_SUCCESS)
   {
     throw std::runtime_error("Failed to create depth image view");
   }
 
-  VkCommandBuffer commandBuffer = mContext.BeginSingleTimeCommands();
+  VkCommandBuffer commandBuffer = mContext->BeginSingleTimeCommands();
 
   VkImageMemoryBarrier2 barrier{
       .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
@@ -723,7 +619,7 @@ void VulkanRenderer::CreateDepthResources()
 
   vkCmdPipelineBarrier2(commandBuffer, &dependencyInfo);
 
-  mContext.EndSingleTimeCommands(commandBuffer);
+  mContext->EndSingleTimeCommands(commandBuffer);
 }
 
 void VulkanRenderer::RecreateSwapchain()
@@ -731,30 +627,34 @@ void VulkanRenderer::RecreateSwapchain()
   int width = 0;
   int height = 0;
 
-  glfwGetFramebufferSize(mContext.GetWindow(), &width, &height);
+  glfwGetFramebufferSize(mContext->GetWindow()->GetGLFWwindow(), &width, &height);
 
   while (width == 0 || height == 0)
   {
-    glfwGetFramebufferSize(mContext.GetWindow(), &width, &height);
+    glfwGetFramebufferSize(mContext->GetWindow()->GetGLFWwindow(), &width, &height);
     glfwWaitEvents();
   }
 
-  vkDeviceWaitIdle(mContext.GetDevice());
+  mContext->GetWindow()->UpdateDimensions();
+
+  vkDeviceWaitIdle(mContext->GetDevice());
 
   mSwapchain.Recreate(mContext);
 
-  vkDestroyImageView(mContext.GetDevice(), mDepthImageView, nullptr);
-  vmaDestroyImage(mContext.GetAllocator(), mDepthImage, mDepthAllocation);
+  vkDestroyImageView(mContext->GetDevice(), mDepthImageView, nullptr);
+  vmaDestroyImage(mContext->GetAllocator(), mDepthImage, mDepthAllocation);
 
   CreateDepthResources();
 }
 
-void VulkanRenderer::SetFramebufferSizeCallback(GLFWwindow *window)
+void VulkanRenderer::SetFramebufferSizeCallback()
 {
+  auto window = mContext->GetWindow()->GetGLFWwindow();
+
   glfwSetWindowUserPointer(window, this);
 
   glfwSetFramebufferSizeCallback(window, [](GLFWwindow *window, int width, int height)
                                  {
-    auto self = reinterpret_cast<VulkanRenderer*>(glfwGetWindowUserPointer(window));
+    auto self = reinterpret_cast<VulkanRenderer*>(glfwGetWindowUserPointer(window));                             
     self->mFramebufferResized = true; });
 };

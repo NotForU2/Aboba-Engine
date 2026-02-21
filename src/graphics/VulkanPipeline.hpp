@@ -13,13 +13,13 @@ class VulkanPipeline
 {
 public:
   void Create(
-      VulkanContext &context,
+      VulkanContext *context,
       const std::string &vertFile,
       const std::string &fragFile,
       VkDescriptorSetLayout descriptorSetLayout,
       VkFormat colorAttachmentFormat,
       VkFormat depthAttachmentFormat);
-  void Destroy(const VulkanContext &context);
+  void Destroy(const VulkanContext *context);
   void Bind(VkCommandBuffer commandBuffer);
 
   VkPipeline GetPipeline() const
@@ -32,6 +32,6 @@ private:
   VkPipeline mPipeline = VK_NULL_HANDLE;
   VkPipelineLayout mPipelineLayout = VK_NULL_HANDLE;
 
-  VkShaderModule CreateShaderModule(const VulkanContext &context, const std::vector<char> &code);
+  VkShaderModule CreateShaderModule(const VulkanContext *context, const std::vector<char> &code);
   static std::vector<char> ReadFile(const std::string &filename);
 };

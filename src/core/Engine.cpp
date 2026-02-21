@@ -4,7 +4,11 @@ Engine::Engine() : mIsRunning(false) {}
 
 Engine::~Engine()
 {
-  mVulkanRenderer.Cleanup();
+  mRenderer.WaitIdle();
+
+  mAssetManager.Cleanup();
+  mRenderer.Cleanup();
+  mContext.Cleanup();
   mWindow.Cleanup();
 }
 
@@ -13,33 +17,22 @@ bool Engine::Init()
   try
   {
     mWindow.Init(mAppName, 800, 600);
+    mContext.Init(&mWindow, mAppName, mEngineName);
+    mRenderer.Init(&mContext);
+    mAssetManager.Init(&mContext);
+
+    mAssetManager.LoadMesh("panda", "models/Panda.obj");
+    mAssetManager.CreateQuad("ground", 1.0f);
+
+    mScene.Init(&mAssetManager);
+
+    mInputSystem.Init(mWindow.GetGLFWwindow());
   }
   catch (const std::exception &e)
   {
-    std::cerr << "Window Init Error: " << e.what() << std::endl;
+    std::cerr << "Init Error: " << e.what() << std::endl;
     return false;
   }
-
-  try
-  {
-    mVulkanRenderer.Init(mWindow.GetWindow(), mAppName, mEngineName);
-    mInputSystem.Init(mWindow.GetWindow());
-  }
-  catch (const std::exception &e)
-  {
-    std::cerr << "Vulkan Init Error: " << e.what() << std::endl;
-    return false;
-  }
-
-  auto camera = mRegistry.create();
-  mRegistry.emplace<CameraComponent>(camera);
-
-  auto unit1 = mRegistry.create();
-  mRegistry.emplace<TransformComponent>(unit1);
-
-  auto unit2 = mRegistry.create();
-  auto &trans = mRegistry.emplace<TransformComponent>(unit2);
-  trans.position = {0.0f, 0.0f, 5.0f};
 
   mIsRunning = true;
 
@@ -62,19 +55,24 @@ void Engine::Run()
 
 void Engine::ProccessInput(float dt)
 {
-  mInputSystem.HandleEvents(mWindow.GetWindow(), mRegistry, dt, mIsRunning);
+  mInputSystem.HandleEvents(mWindow.GetGLFWwindow(), mScene.GetRegistry(), dt, mIsRunning);
 }
 
 void Engine::Update(float dt)
 {
-  mMovementSystem.Update(mRegistry, dt);
-  mCollisionSystem.Update(mRegistry, dt);
+  mScene.Update(dt);
+  mMovementSystem.Update(mScene.GetRegistry(), dt);
+  mCollisionSystem.Update(mScene.GetRegistry(), dt);
 }
 
 void Engine::Render()
 {
   if (mWindow.CanRender())
   {
-    mVulkanRenderer.DrawFrame(mRegistry);
+    auto renderData = mScene.ExtractRenderData();
+    float aspect = static_cast<float>(mWindow.GetWindowWidth()) / static_cast<float>(mWindow.GetWindowHeight());
+    auto cameraData = mScene.ExtractCameraData(aspect);
+
+    mRenderer.DrawFrame(renderData, cameraData);
   }
 }

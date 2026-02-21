@@ -1,34 +1,34 @@
 #include "VulkanSwapchain.hpp"
 
-void VulkanSwapchain::Create(VulkanContext &context)
+void VulkanSwapchain::Create(VulkanContext *context)
 {
   CreateSwapchain(context);
   CreateImageViews(context);
 }
 
-void VulkanSwapchain::Destroy(const VulkanContext &context)
+void VulkanSwapchain::Destroy(const VulkanContext *context)
 {
   for (auto imageView : mImageViews)
   {
-    vkDestroyImageView(context.GetDevice(), imageView, nullptr);
+    vkDestroyImageView(context->GetDevice(), imageView, nullptr);
   }
   mImageViews.clear();
 
   if (mSwapchain != VK_NULL_HANDLE)
   {
-    vkDestroySwapchainKHR(context.GetDevice(), mSwapchain, nullptr);
+    vkDestroySwapchainKHR(context->GetDevice(), mSwapchain, nullptr);
     mSwapchain = VK_NULL_HANDLE;
   }
 }
 
-void VulkanSwapchain::Recreate(VulkanContext &context)
+void VulkanSwapchain::Recreate(VulkanContext *context)
 {
-  vkDeviceWaitIdle(context.GetDevice());
+  vkDeviceWaitIdle(context->GetDevice());
   Destroy(context);
   Create(context);
 }
 
-void VulkanSwapchain::CreateSwapchain(VulkanContext &context)
+void VulkanSwapchain::CreateSwapchain(VulkanContext *context)
 {
   SwapchainSupportDetails swapchainSupport = QuerySupport(context);
 
@@ -46,7 +46,7 @@ void VulkanSwapchain::CreateSwapchain(VulkanContext &context)
 
   VkSwapchainCreateInfoKHR createInfo{
       .sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
-      .surface = context.GetSurface(),
+      .surface = context->GetSurface(),
       .minImageCount = imageCount,
       .imageFormat = surfaceFormat.surfaceFormat.format,
       .imageColorSpace = surfaceFormat.surfaceFormat.colorSpace,
@@ -61,8 +61,8 @@ void VulkanSwapchain::CreateSwapchain(VulkanContext &context)
   };
 
   std::vector<uint32_t> queueFamilyIndices = {
-      context.GetGraphicsFamily(),
-      context.GetPresentFamily(),
+      context->GetGraphicsFamily(),
+      context->GetPresentFamily(),
   };
 
   if (queueFamilyIndices[0] != queueFamilyIndices[1])
@@ -76,7 +76,7 @@ void VulkanSwapchain::CreateSwapchain(VulkanContext &context)
     createInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
   }
 
-  if (vkCreateSwapchainKHR(context.GetDevice(), &createInfo, nullptr, &mSwapchain) != VK_SUCCESS)
+  if (vkCreateSwapchainKHR(context->GetDevice(), &createInfo, nullptr, &mSwapchain) != VK_SUCCESS)
   {
     throw std::runtime_error("Failed to create Swapchain");
   }
@@ -84,15 +84,15 @@ void VulkanSwapchain::CreateSwapchain(VulkanContext &context)
   mImageFormat = surfaceFormat.surfaceFormat.format;
   mExtent = extent;
 
-  vkGetSwapchainImagesKHR(context.GetDevice(), mSwapchain, &imageCount, nullptr);
+  vkGetSwapchainImagesKHR(context->GetDevice(), mSwapchain, &imageCount, nullptr);
   mImages.resize(imageCount);
-  vkGetSwapchainImagesKHR(context.GetDevice(), mSwapchain, &imageCount, mImages.data());
+  vkGetSwapchainImagesKHR(context->GetDevice(), mSwapchain, &imageCount, mImages.data());
 
   std::cout << "Swapchain created. Images: " << imageCount << ", Resolution: "
             << extent.width << "x" << extent.height << std::endl;
 }
 
-void VulkanSwapchain::CreateImageViews(VulkanContext &context)
+void VulkanSwapchain::CreateImageViews(VulkanContext *context)
 {
   mImageViews.resize(mImages.size());
 
@@ -118,30 +118,30 @@ void VulkanSwapchain::CreateImageViews(VulkanContext &context)
         },
     };
 
-    if (vkCreateImageView(context.GetDevice(), &createInfo, nullptr, &mImageViews[i]) != VK_SUCCESS)
+    if (vkCreateImageView(context->GetDevice(), &createInfo, nullptr, &mImageViews[i]) != VK_SUCCESS)
     {
       throw std::runtime_error("Failed to create Image Views");
     }
   }
 }
 
-SwapchainSupportDetails VulkanSwapchain::QuerySupport(VulkanContext &context)
+SwapchainSupportDetails VulkanSwapchain::QuerySupport(VulkanContext *context)
 {
   SwapchainSupportDetails details;
 
   VkPhysicalDeviceSurfaceInfo2KHR surfaceInfo2{
       .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SURFACE_INFO_2_KHR,
-      .surface = context.GetSurface(),
+      .surface = context->GetSurface(),
   };
 
   VkSurfaceCapabilities2KHR capabilities2{
       .sType = VK_STRUCTURE_TYPE_SURFACE_CAPABILITIES_2_KHR,
   };
-  vkGetPhysicalDeviceSurfaceCapabilities2KHR(context.GetPhysicalDevice(), &surfaceInfo2, &capabilities2);
+  vkGetPhysicalDeviceSurfaceCapabilities2KHR(context->GetPhysicalDevice(), &surfaceInfo2, &capabilities2);
   details.capabilities = capabilities2;
 
   uint32_t formatCount;
-  vkGetPhysicalDeviceSurfaceFormats2KHR(context.GetPhysicalDevice(), &surfaceInfo2, &formatCount, nullptr);
+  vkGetPhysicalDeviceSurfaceFormats2KHR(context->GetPhysicalDevice(), &surfaceInfo2, &formatCount, nullptr);
   if (formatCount != 0)
   {
     VkSurfaceFormat2KHR defaultFormat{
@@ -149,17 +149,17 @@ SwapchainSupportDetails VulkanSwapchain::QuerySupport(VulkanContext &context)
     };
     std::vector<VkSurfaceFormat2KHR> formats2(formatCount, defaultFormat);
 
-    vkGetPhysicalDeviceSurfaceFormats2KHR(context.GetPhysicalDevice(), &surfaceInfo2, &formatCount, formats2.data());
+    vkGetPhysicalDeviceSurfaceFormats2KHR(context->GetPhysicalDevice(), &surfaceInfo2, &formatCount, formats2.data());
 
     details.formats = formats2;
   }
 
   uint32_t presentModeCount;
-  vkGetPhysicalDeviceSurfacePresentModesKHR(context.GetPhysicalDevice(), context.GetSurface(), &presentModeCount, nullptr);
+  vkGetPhysicalDeviceSurfacePresentModesKHR(context->GetPhysicalDevice(), context->GetSurface(), &presentModeCount, nullptr);
   if (presentModeCount != 0)
   {
     details.presentModes.resize(presentModeCount);
-    vkGetPhysicalDeviceSurfacePresentModesKHR(context.GetPhysicalDevice(), context.GetSurface(), &presentModeCount, details.presentModes.data());
+    vkGetPhysicalDeviceSurfacePresentModesKHR(context->GetPhysicalDevice(), context->GetSurface(), &presentModeCount, details.presentModes.data());
   }
 
   return details;
@@ -191,7 +191,7 @@ VkPresentModeKHR VulkanSwapchain::ChoosePresentMode(const std::vector<VkPresentM
   return VK_PRESENT_MODE_FIFO_KHR;
 }
 
-VkExtent2D VulkanSwapchain::ChooseExtent(VulkanContext &context, const VkSurfaceCapabilities2KHR &capabilities2)
+VkExtent2D VulkanSwapchain::ChooseExtent(VulkanContext *context, const VkSurfaceCapabilities2KHR &capabilities2)
 {
   if (capabilities2.surfaceCapabilities.currentExtent.width != std::numeric_limits<uint32_t>::max())
   {
@@ -199,8 +199,8 @@ VkExtent2D VulkanSwapchain::ChooseExtent(VulkanContext &context, const VkSurface
   }
   else
   {
-    int width, height;
-    glfwGetFramebufferSize(context.GetWindow(), &width, &height);
+    int width = context->GetWindow()->GetFramebufferWidth();
+    int height = context->GetWindow()->GetFramebufferHeight();
 
     VkExtent2D actualExtent = {
         static_cast<uint32_t>(width),

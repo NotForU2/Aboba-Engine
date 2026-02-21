@@ -23,21 +23,3 @@ struct CameraComponent
     return glm::lookAt(cameraPos, focusPoint, glm::vec3(0.0f, 1.0f, 0.0f));
   }
 };
-
-// struct Camera {
-//     glm::vec3 focusPoint{0.0f, 0.0f, 0.0f}; // Точка на земле, куда смотрит камера
-//     float zoom = 10.0f;     // Высота камеры над землей
-//     float angle = 45.0f;    // Угол наклона (обычно 45-60 градусов для RTS)
-
-//     // Матрица вида теперь рассчитывается иначе
-//     glm::mat4 GetViewMatrix() const {
-//         // Рассчитываем позицию "глаза" камеры относительно точки фокуса
-//         // Смещаем камеру назад (по Z) и вверх (по Y)
-//         float yOffset = zoom;
-//         float zOffset = zoom / tan(glm::radians(angle)); // Или просто zoom, если хотим 45 градусов
-
-//         glm::vec3 eyePosition = focusPoint + glm::vec3(0.0f, yOffset, zOffset);
-
-//         return glm::lookAt(eyePosition, focusPoint, glm::vec3(0.0f, 1.0f, 0.0f));
-//     }
-// };

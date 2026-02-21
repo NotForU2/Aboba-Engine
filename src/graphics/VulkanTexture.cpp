@@ -2,7 +2,7 @@
 #include "stb_image.h"
 #include "VulkanTexture.hpp"
 
-void VulkanTexture::Create(VulkanContext &context, const std::string &filepath)
+void VulkanTexture::Create(VulkanContext *context, const std::string &filepath)
 {
   stbi_uc *pixels = stbi_load(filepath.c_str(), &mWidth, &mHeight, &mChannels, STBI_rgb_alpha);
   VkDeviceSize imageSize = mWidth * mHeight * 4; // RGBA
@@ -14,12 +14,12 @@ void VulkanTexture::Create(VulkanContext &context, const std::string &filepath)
 
   VulkanBuffer stagingBuffer;
   stagingBuffer.Create(
-      context.GetAllocator(),
+      context->GetAllocator(),
       imageSize,
       VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
       VMA_MEMORY_USAGE_AUTO,
       VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT);
-  stagingBuffer.Upload(context.GetAllocator(), pixels, static_cast<size_t>(imageSize));
+  stagingBuffer.Upload(context->GetAllocator(), pixels, static_cast<size_t>(imageSize));
 
   stbi_image_free(pixels);
 
@@ -36,7 +36,7 @@ void VulkanTexture::Create(VulkanContext &context, const std::string &filepath)
   // Транзакция: TransferDst -> ShaderReadOnly
   TransitionImageLayout(context, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 
-  stagingBuffer.Destroy(context.GetAllocator());
+  stagingBuffer.Destroy(context->GetAllocator());
 
   VkImageViewCreateInfo viewInfo{
       .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
@@ -52,7 +52,7 @@ void VulkanTexture::Create(VulkanContext &context, const std::string &filepath)
       },
   };
 
-  if (vkCreateImageView(context.GetDevice(), &viewInfo, nullptr, &mImageView) != VK_SUCCESS)
+  if (vkCreateImageView(context->GetDevice(), &viewInfo, nullptr, &mImageView) != VK_SUCCESS)
   {
     throw std::runtime_error("Failed to create texture image view");
   }
@@ -73,20 +73,20 @@ void VulkanTexture::Create(VulkanContext &context, const std::string &filepath)
       .unnormalizedCoordinates = VK_FALSE,
   };
 
-  if (vkCreateSampler(context.GetDevice(), &samplerInfo, nullptr, &mSampler) != VK_SUCCESS)
+  if (vkCreateSampler(context->GetDevice(), &samplerInfo, nullptr, &mSampler) != VK_SUCCESS)
   {
     throw std::runtime_error("Failed to create texture sampler");
   }
 }
 
-void VulkanTexture::Destroy(VulkanContext &context)
+void VulkanTexture::Destroy(VulkanContext *context)
 {
-  vkDestroySampler(context.GetDevice(), mSampler, nullptr);
-  vkDestroyImageView(context.GetDevice(), mImageView, nullptr);
-  vmaDestroyImage(context.GetAllocator(), mImage, mAllocation);
+  vkDestroySampler(context->GetDevice(), mSampler, nullptr);
+  vkDestroyImageView(context->GetDevice(), mImageView, nullptr);
+  vmaDestroyImage(context->GetAllocator(), mImage, mAllocation);
 }
 
-void VulkanTexture::CreateImage(VulkanContext &context, uint32_t width, uint32_t height, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VmaMemoryUsage memoryUsage)
+void VulkanTexture::CreateImage(VulkanContext *context, uint32_t width, uint32_t height, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VmaMemoryUsage memoryUsage)
 {
   VkImageCreateInfo imageInfo{
       .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
@@ -110,15 +110,15 @@ void VulkanTexture::CreateImage(VulkanContext &context, uint32_t width, uint32_t
       .usage = memoryUsage,
   };
 
-  if (vmaCreateImage(context.GetAllocator(), &imageInfo, &allocInfo, &mImage, &mAllocation, nullptr) != VK_SUCCESS)
+  if (vmaCreateImage(context->GetAllocator(), &imageInfo, &allocInfo, &mImage, &mAllocation, nullptr) != VK_SUCCESS)
   {
     throw std::runtime_error("Failed to create image");
   }
 }
 
-void VulkanTexture::TransitionImageLayout(VulkanContext &context, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout)
+void VulkanTexture::TransitionImageLayout(VulkanContext *context, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout)
 {
-  VkCommandBuffer commandBuffer = context.BeginSingleTimeCommands();
+  VkCommandBuffer commandBuffer = context->BeginSingleTimeCommands();
 
   VkImageMemoryBarrier2 barrier{
       .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
@@ -169,12 +169,12 @@ void VulkanTexture::TransitionImageLayout(VulkanContext &context, VkFormat forma
 
   vkCmdPipelineBarrier2(commandBuffer, &dependencyInfo);
 
-  context.EndSingleTimeCommands(commandBuffer);
+  context->EndSingleTimeCommands(commandBuffer);
 }
 
-void VulkanTexture::CopyBufferToImage(VulkanContext &context, VkBuffer buffer, uint32_t width, uint32_t height)
+void VulkanTexture::CopyBufferToImage(VulkanContext *context, VkBuffer buffer, uint32_t width, uint32_t height)
 {
-  VkCommandBuffer commandBuffer = context.BeginSingleTimeCommands();
+  VkCommandBuffer commandBuffer = context->BeginSingleTimeCommands();
 
   VkBufferImageCopy2 region{
       .sType = VK_STRUCTURE_TYPE_BUFFER_IMAGE_COPY_2,
@@ -202,5 +202,5 @@ void VulkanTexture::CopyBufferToImage(VulkanContext &context, VkBuffer buffer, u
 
   vkCmdCopyBufferToImage2(commandBuffer, &copyInfo);
 
-  context.EndSingleTimeCommands(commandBuffer);
+  context->EndSingleTimeCommands(commandBuffer);
 }

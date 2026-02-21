@@ -1,7 +1,7 @@
 #define VMA_IMPLEMENTATION
 #include "VulkanContext.hpp"
 
-void VulkanContext::Init(GLFWwindow *window, const char *appName, const char *engineName)
+void VulkanContext::Init(Window *window, const char *appName, const char *engineName)
 {
   mWindow = window;
 
@@ -353,7 +353,7 @@ void VulkanContext::CreateLogicalDevice()
 
 void VulkanContext::CreateSurface()
 {
-  if (glfwCreateWindowSurface(mInstance, mWindow, nullptr, &mSurface) != VK_SUCCESS)
+  if (glfwCreateWindowSurface(mInstance, mWindow->GetGLFWwindow(), nullptr, &mSurface) != VK_SUCCESS)
   {
     throw std::runtime_error("Failed to create window surface");
   }

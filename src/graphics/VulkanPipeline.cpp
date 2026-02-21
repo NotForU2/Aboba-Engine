@@ -21,7 +21,7 @@ std::vector<char> VulkanPipeline::ReadFile(const std::string &filename)
     return buffer;
 }
 
-VkShaderModule VulkanPipeline::CreateShaderModule(const VulkanContext &context, const std::vector<char> &code)
+VkShaderModule VulkanPipeline::CreateShaderModule(const VulkanContext *context, const std::vector<char> &code)
 {
     VkShaderModuleCreateInfo createInfo{
         .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
@@ -30,7 +30,7 @@ VkShaderModule VulkanPipeline::CreateShaderModule(const VulkanContext &context, 
     };
 
     VkShaderModule shaderModule;
-    if (vkCreateShaderModule(context.GetDevice(), &createInfo, nullptr, &shaderModule) != VK_SUCCESS)
+    if (vkCreateShaderModule(context->GetDevice(), &createInfo, nullptr, &shaderModule) != VK_SUCCESS)
     {
         throw std::runtime_error("Failed to create shader module");
     }
@@ -38,7 +38,7 @@ VkShaderModule VulkanPipeline::CreateShaderModule(const VulkanContext &context, 
     return shaderModule;
 }
 
-void VulkanPipeline::Create(VulkanContext &context, const std::string &vertFile, const std::string &fragFile, VkDescriptorSetLayout descriptorSetLayout, VkFormat colorAttachmentFormat, VkFormat depthAttachmentFormat)
+void VulkanPipeline::Create(VulkanContext *context, const std::string &vertFile, const std::string &fragFile, VkDescriptorSetLayout descriptorSetLayout, VkFormat colorAttachmentFormat, VkFormat depthAttachmentFormat)
 {
     auto vertShaderCode = ReadFile(vertFile);
     auto fragShaderCode = ReadFile(fragFile);
@@ -157,7 +157,7 @@ void VulkanPipeline::Create(VulkanContext &context, const std::string &vertFile,
         .pPushConstantRanges = &pushConstantRange,
     };
 
-    if (vkCreatePipelineLayout(context.GetDevice(), &pipelineLayoutInfo, nullptr, &mPipelineLayout) != VK_SUCCESS)
+    if (vkCreatePipelineLayout(context->GetDevice(), &pipelineLayoutInfo, nullptr, &mPipelineLayout) != VK_SUCCESS)
     {
         throw std::runtime_error("Failed to create pipeline layout");
     }
@@ -189,7 +189,7 @@ void VulkanPipeline::Create(VulkanContext &context, const std::string &vertFile,
         .subpass = 0,
     };
 
-    if (vkCreateGraphicsPipelines(context.GetDevice(), VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &mPipeline) != VK_SUCCESS)
+    if (vkCreateGraphicsPipelines(context->GetDevice(), VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &mPipeline) != VK_SUCCESS)
     {
         throw std::runtime_error("Failed to create graphics pipeline");
     }
@@ -197,20 +197,20 @@ void VulkanPipeline::Create(VulkanContext &context, const std::string &vertFile,
     std::cout << "Vulkan Graphics Pipeline created successfully" << std::endl;
 
     // 12. Delete Shader modules
-    vkDestroyShaderModule(context.GetDevice(), fragShaderModule, nullptr);
-    vkDestroyShaderModule(context.GetDevice(), vertShaderModule, nullptr);
+    vkDestroyShaderModule(context->GetDevice(), fragShaderModule, nullptr);
+    vkDestroyShaderModule(context->GetDevice(), vertShaderModule, nullptr);
 }
 
-void VulkanPipeline::Destroy(const VulkanContext &context)
+void VulkanPipeline::Destroy(const VulkanContext *context)
 {
     if (mPipeline != VK_NULL_HANDLE)
     {
-        vkDestroyPipeline(context.GetDevice(), mPipeline, nullptr);
+        vkDestroyPipeline(context->GetDevice(), mPipeline, nullptr);
         mPipeline = VK_NULL_HANDLE;
     }
     if (mPipelineLayout != VK_NULL_HANDLE)
     {
-        vkDestroyPipelineLayout(context.GetDevice(), mPipelineLayout, nullptr);
+        vkDestroyPipelineLayout(context->GetDevice(), mPipelineLayout, nullptr);
         mPipelineLayout = VK_NULL_HANDLE;
     }
 }

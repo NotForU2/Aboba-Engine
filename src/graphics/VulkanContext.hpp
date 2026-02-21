@@ -11,6 +11,7 @@
 #include <iostream>
 #include <map>
 #include <set>
+#include "../core/Window.hpp"
 
 struct QueueFamilyIndices
 {
@@ -36,10 +37,10 @@ struct QueueFamilyIndices
 class VulkanContext
 {
 public:
-  void Init(GLFWwindow *window, const char *appName, const char *engineName);
+  void Init(Window *window, const char *appName, const char *engineName);
   void Cleanup();
 
-  GLFWwindow *GetWindow() const { return mWindow; }
+  Window *GetWindow() { return mWindow; }
   VkInstance GetInstance() const { return mInstance; }
   VkDevice GetDevice() const { return mDevice; }
   VkPhysicalDevice GetPhysicalDevice() const { return mPhysicalDevice; }
@@ -56,7 +57,7 @@ public:
   void CopyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size);
 
 private:
-  GLFWwindow *mWindow;
+  Window *mWindow = nullptr;
   VkInstance mInstance;
   VkPhysicalDevice mPhysicalDevice = VK_NULL_HANDLE;
   VkDevice mDevice;

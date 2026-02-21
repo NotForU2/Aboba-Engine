@@ -1,6 +1,5 @@
 #include "Window.hpp"
 #include "Logger.hpp"
-#include "../system/InputSystem.hpp"
 
 Window::Window() {}
 
@@ -9,7 +8,7 @@ Window::~Window()
   Cleanup();
 }
 
-GLFWwindow *Window::GetWindow()
+GLFWwindow *Window::GetGLFWwindow()
 {
   return mWindow;
 }
@@ -30,8 +29,13 @@ void Window::Init(const char *title, int width, int height)
 
   glfwSetInputMode(mWindow, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
 
-  mWidth = width;
-  mHeight = height;
+  UpdateDimensions();
+}
+
+void Window::UpdateDimensions()
+{
+  glfwGetWindowSize(mWindow, &mWindowWidth, &mWindowHeight);
+  glfwGetFramebufferSize(mWindow, &mFramebufferWidth, &mFramebufferHeight);
 }
 
 bool Window::CanRender()
